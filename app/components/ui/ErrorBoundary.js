@@ -19,13 +19,14 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div style={{
-          background: 'rgba(14, 14, 14, 0.92)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          borderRadius: '8px',
-          padding: '2rem',
+          background: '#111',
+          border: '1px solid #222',
+          borderLeft: '3px solid #ef4444',
+          borderRadius: '0',
+          padding: '16px',
           fontFamily: "'JetBrains Mono', monospace",
-          color: 'rgba(255,255,255,0.6)',
-          fontSize: '0.85rem',
+          color: '#999',
+          fontSize: '0.8rem',
           textAlign: 'center',
           letterSpacing: '0.1em',
         }}>
