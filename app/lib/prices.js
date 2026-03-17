@@ -1,12 +1,14 @@
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import Database from 'better-sqlite3'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CACHE_FILE = path.join(__dirname, '../../price-cache.json')
+const DB_PATH = path.join(process.env.HOME, '.openclaw/workspace/woozy.db')
 
-const CACHE_TTL_MARKET = 15 * 60 * 1000   // 15 min during market hours
-const CACHE_TTL_OFF = 60 * 60 * 1000       // 1 hour outside market hours
+const CACHE_TTL_MARKET = 15 * 60 * 1000
+const CACHE_TTL_OFF = 60 * 60 * 1000
 
 function isMarketHours() {
   const now = new Date()
@@ -37,19 +39,18 @@ function writeCache(data) {
   }
 }
 
-async function fetchHNDQPrice() {
-  // Scrape Google Finance for HNDQ:ASX
-  const res = await fetch('https://www.google.com/finance/quote/HNDQ:ASX', {
+async function fetchASXPrice(ticker) {
+  // Scrape Google Finance for ASX-listed tickers
+  const res = await fetch(`https://www.google.com/finance/quote/${ticker}:ASX`, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' }
   })
   const html = await res.text()
   const match = html.match(/data-last-price="([0-9.]+)"/)
   if (match) return parseFloat(match[1])
-  throw new Error('Could not parse HNDQ price from Google Finance')
+  throw new Error(`Could not parse ${ticker} price from Google Finance`)
 }
 
 async function fetchGoldPriceAUD() {
-  // Get gold price in USD per troy ounce from gold-api.com
   const [goldRes, fxRes] = await Promise.all([
     fetch('https://api.gold-api.com/price/XAU'),
     fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json')
@@ -59,10 +60,15 @@ async function fetchGoldPriceAUD() {
   
   const usdPerOz = goldData.price
   const audRate = fxData.usd.aud
-  
-  // Convert to AUD per gram (1 troy oz = 31.1035g)
   const audPerGram = (usdPerOz / 31.1035) * audRate
   return { audPerGram: Math.round(audPerGram * 100) / 100, audRate }
+}
+
+function getHoldings() {
+  const db = new Database(DB_PATH, { readonly: true })
+  const holdings = db.prepare('SELECT * FROM holdings').all()
+  db.close()
+  return holdings
 }
 
 export async function fetchPrices(force = false) {
@@ -73,28 +79,42 @@ export async function fetchPrices(force = false) {
     return { ...cache, fromCache: true }
   }
   
+  const holdings = getHoldings()
   const result = {
-    hndq: cache?.hndq || null,
+    prices: cache?.prices || {},
     goldPerGram: cache?.goldPerGram || null,
     audRate: cache?.audRate || null,
     fetchedAt: now,
     errors: []
   }
   
-  // Fetch HNDQ
-  try {
-    result.hndq = await fetchHNDQPrice()
-  } catch (e) {
-    result.errors.push(`HNDQ: ${e.message}`)
+  // Keep backward compat
+  if (cache?.hndq) result.prices['HNDQ'] = cache.hndq
+
+  // Fetch prices for all holdings with tickers (ASX ETFs)
+  const tickerHoldings = holdings.filter(h => h.ticker && h.type === 'etf')
+  for (const h of tickerHoldings) {
+    const symbol = h.ticker.replace('.AX', '')
+    try {
+      result.prices[h.name] = await fetchASXPrice(symbol)
+    } catch (e) {
+      result.errors.push(`${h.name}: ${e.message}`)
+    }
   }
   
-  // Fetch Gold
-  try {
-    const gold = await fetchGoldPriceAUD()
-    result.goldPerGram = gold.audPerGram
-    result.audRate = gold.audRate
-  } catch (e) {
-    result.errors.push(`Gold: ${e.message}`)
+  // Backward compat
+  if (result.prices['HNDQ']) result.hndq = result.prices['HNDQ']
+
+  // Fetch gold if any commodity holdings exist
+  const hasGold = holdings.some(h => h.type === 'commodity')
+  if (hasGold) {
+    try {
+      const gold = await fetchGoldPriceAUD()
+      result.goldPerGram = gold.audPerGram
+      result.audRate = gold.audRate
+    } catch (e) {
+      result.errors.push(`Gold: ${e.message}`)
+    }
   }
   
   writeCache(result)

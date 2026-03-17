@@ -289,11 +289,7 @@ export default function FinancePage() {
   const savings = accounts.find(a => a.name === 'Savings')?.balance || 0
   const cash = accounts.find(a => a.name === 'Cash')?.balance || 0
   const liquid = checking + savings + cash
-  const hndq = holdings.find(h => h.name === 'HNDQ')
-  const hndqVal = hndq?.current_value || 0
-  const gold = holdings.find(h => h.name === 'Gold')
-  const goldVal = gold?.current_value || 0
-  const invested = hndqVal + goldVal
+  const invested = holdings.reduce((s, h) => s + (h.current_value || 0), 0)
   const pendingTx = transactions.filter(t => t.type === 'income' && (t.status === 'pending' || t.status === 'paid'))
   const receivables = pendingTx.reduce((s, t) => s + t.amount, 0)
   const netWorth = liquid + invested + receivables
@@ -317,15 +313,6 @@ export default function FinancePage() {
     monthlyTotals2026[m] = (monthlyTotals2026[m] || 0) + t.amount
   })
   const bestMonth2026 = Object.entries(monthlyTotals2026).sort((a, b) => b[1] - a[1])[0]
-
-  // Client revenue
-  const clientRevenue = {}
-  completedIncome.forEach(t => {
-    const name = t.project_name || 'Other'
-    clientRevenue[name] = (clientRevenue[name] || 0) + t.amount
-  })
-  const clientsSorted = Object.entries(clientRevenue).sort((a, b) => b[1] - a[1])
-  const maxClientRev = clientsSorted.length > 0 ? clientsSorted[0][1] : 1
 
   // Runway
   const monthsTracked = new Set(completedIncome.map(t => t.date?.slice(0, 7))).size || 1
@@ -645,29 +632,6 @@ export default function FinancePage() {
             </div>
           )
         })}
-      </div>
-
-      {/* ═══ CLIENT REVENUE ═══ */}
-      <div className="card full" style={{marginBottom:'1.5rem'}}>
-        <SectionHeader title="REVENUE BY CLIENT" />
-        {clientsSorted.length > 0 ? (
-          <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
-            {clientsSorted.map(([name, amount], i) => {
-              const pct = totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
-              return (
-                <div key={i}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.2rem',fontSize:'0.7rem'}}>
-                    <span style={{color:'#999'}}>{name}</span>
-                    <span style={{color:'#fff',fontWeight:600}}>{fmt(amount)} <span style={{color:'#555'}}>{pct}%</span></span>
-                  </div>
-                  <BlockBar value={amount} max={maxClientRev} width={24} />
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div style={{color:'#555',fontSize:'0.75rem',textAlign:'center',padding:'1rem'}}>No revenue data</div>
-        )}
       </div>
 
       {/* ═══ ACCOUNT CARDS ═══ */}

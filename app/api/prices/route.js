@@ -13,8 +13,13 @@ function updateHoldings(prices) {
   
   for (const h of holdings) {
     let price = h.current_price
-    if (h.name === 'HNDQ' && prices.hndq) price = prices.hndq
-    if (h.name === 'Gold' && prices.goldPerGram) price = prices.goldPerGram
+    
+    // Dynamic price resolution
+    if (h.type === 'etf' && prices.prices?.[h.name]) {
+      price = prices.prices[h.name]
+    } else if (h.type === 'commodity' && h.name === 'Gold' && prices.goldPerGram) {
+      price = prices.goldPerGram
+    }
     
     const value = Math.round(h.quantity * price * 100) / 100
     
@@ -23,7 +28,6 @@ function updateHoldings(prices) {
       WHERE id = ?
     `).run(price, value, now, now, h.id)
     
-    // Log to price_history (one entry per day per holding)
     const today = new Date().toISOString().split('T')[0]
     db.prepare(`
       INSERT OR REPLACE INTO price_history (holding_id, price, value, date)
