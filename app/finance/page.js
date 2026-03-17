@@ -313,6 +313,27 @@ function IncomeByClient({ transactions }) {
   )
 }
 
+// === STRIPE STATUS ===
+function StripeStatus() {
+  const [status, setStatus] = useState(null)
+  useEffect(() => {
+    fetch('/api/stripe-status').then(r => r.json()).then(setStatus).catch(() => {})
+  }, [])
+  if (!status) return null
+  const dotColor = status.connected ? '#22c55e' : status.configured ? '#ef4444' : '#d97706'
+  const label = status.connected ? 'connected' : status.configured ? 'disconnected' : 'not configured'
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:'JetBrains Mono',fontSize:'11px',color:'#555',padding:'0.5rem 0'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'0.35rem'}}>
+        <span style={{width:'6px',height:'6px',borderRadius:'50%',background:dotColor,display:'inline-block'}} />
+        <span>stripe: {label}</span>
+      </div>
+      {status.syncCount > 0 && <span>{status.syncCount} synced</span>}
+      {status.lastWebhook && <span>last: {new Date(status.lastWebhook + 'Z').toLocaleString('en-AU',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>}
+    </div>
+  )
+}
+
 // === MAIN FINANCE PAGE ===
 export default function FinancePage() {
   const [unlocked, setUnlocked] = useState(false)
@@ -672,8 +693,11 @@ export default function FinancePage() {
       </div>
 
       {/* FOOTER */}
-      <div style={{fontSize:'0.65rem',color:'#333',textAlign:'center',padding:'2rem 0',letterSpacing:'0.1em'}}>
-        WOOZY FINANCE · LAST UPDATE {new Date(data.updated).toLocaleString('en-AU', {hour:'2-digit',minute:'2-digit',hour12:false})}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'2rem 0',flexWrap:'wrap'}}>
+        <StripeStatus />
+        <div style={{fontSize:'0.65rem',color:'#333',letterSpacing:'0.1em'}}>
+          WOOZY FINANCE · LAST UPDATE {new Date(data.updated).toLocaleString('en-AU', {hour:'2-digit',minute:'2-digit',hour12:false})}
+        </div>
       </div>
     </div>
     </DecryptReveal>
