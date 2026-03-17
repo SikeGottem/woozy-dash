@@ -331,11 +331,6 @@ export default function FinancePage() {
   const [captureOpen, setCaptureOpen] = useState(false)
 
   useEffect(() => {
-    const was = sessionStorage.getItem('woozy-unlocked') === 'true'
-    if (was) setUnlocked(true)
-  }, [])
-
-  useEffect(() => {
     if (!unlocked) return
     fetch('/api/finance').then(r => r.json()).then(setData).catch(() => {})
     fetch('/api/prices').then(r => r.json()).then(d => setLiveHoldings(d.holdings)).catch(() => {})
@@ -343,13 +338,12 @@ export default function FinancePage() {
 
   const handleUnlock = useCallback(() => {
     setUnlocked(true)
-    sessionStorage.setItem('woozy-unlocked', 'true')
   }, [])
 
   const toolbarProps = {
     onCapture: () => setCaptureOpen(true),
     unlocked,
-    onLock: () => { setUnlocked(false); sessionStorage.removeItem('woozy-unlocked') },
+    onLock: () => { setUnlocked(false) },
     focusMode, setFocusMode,
     contextMode, setContextMode,
     energy, setEnergy,

@@ -83,7 +83,10 @@ const bootSequence = [
 export default function Home() {
   const [data, setData] = useState(null)
   const [unlocked] = useState(false)
-  const [booted, setBooted] = useState(false)
+  const [booted, setBooted] = useState(() => {
+    if (typeof window !== 'undefined') return sessionStorage.getItem('woozy-booted') === 'true'
+    return false
+  })
   const [bootLines, setBootLines] = useState([])
   const [captureOpen, setCaptureOpen] = useState(false)
   const [focusMode, setFocusMode] = useState(false)
@@ -136,7 +139,7 @@ export default function Home() {
     if (data && !booted) {
       bootSequence.forEach(({ text, delay, done }) => {
         setTimeout(() => {
-          if (done) setBooted(true)
+          if (done) { setBooted(true); sessionStorage.setItem('woozy-booted', 'true') }
           else setBootLines(prev => [...prev, text])
         }, delay)
       })

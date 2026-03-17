@@ -16,7 +16,6 @@ export function PinLock({ onUnlock }) {
           const next = (prev + e.key).slice(0, 4)
           if (next.length === 4) {
             if (next === '2238') {
-              sessionStorage.setItem('woozy-unlocked', 'true')
               setTimeout(() => onUnlock(), 200)
             } else {
               setError(true)
