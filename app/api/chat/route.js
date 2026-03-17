@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
-const GATEWAY_URL = 'http://127.0.0.1:18789/v1/chat/completions'
-const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || 'REDACTED'
+const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions'
+const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN
 
 export async function POST(request) {
   try {

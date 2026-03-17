@@ -353,11 +353,13 @@ export async function POST(request) {
     const message = templateMessages[template] || `Use sessions_spawn to run this task: ${task}`
 
     // Call OpenClaw Gateway to spawn the agent
-    const response = await fetch('http://127.0.0.1:18789/v1/chat/completions', {
+    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions'
+    const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN
+    const response = await fetch(gatewayUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer REDACTED',
+        'Authorization': `Bearer ${gatewayToken}`,
         'x-openclaw-session-key': 'agent:main:main'
       },
       body: JSON.stringify({
