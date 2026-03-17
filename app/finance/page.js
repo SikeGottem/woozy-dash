@@ -332,13 +332,9 @@ export default function FinancePage() {
   const avgMonthlyIncome = totalIncome / monthsTracked
   const avgMonthlyExpenses = totalExpenses / monthsTracked
 
-  // HNDQ performance
-  const hndqCost = hndq?.cost_basis || 0
-  const hndqReturn = hndqVal - hndqCost
-  const hndqReturnPct = hndqCost > 0 ? ((hndqReturn / hndqCost) * 100).toFixed(1) : 0
-  const hndqQty = hndq?.quantity || 0
-  const hndqAvgCost = hndqQty > 0 ? hndqCost / hndqQty : 0
-  const hndqCurrentPrice = hndq?.current_price || 0
+  // Portfolio totals (used in invested card breakdown)
+  const portfolioCost = holdings.reduce((s, h) => s + (h.cost_basis || 0), 0)
+  const portfolioReturn = invested - portfolioCost
 
   // Days until birthday
   const birthday = new Date('2026-03-22T00:00:00+11:00')
@@ -384,7 +380,7 @@ export default function FinancePage() {
           <div style={{padding:'0.75rem',border:'1px solid #222'}}>
             <div style={{fontSize:'0.6rem',color:'#555',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'0.35rem'}}>INVESTED (market)</div>
             <div style={{fontSize:'1.3rem',fontWeight:700,color:'#fff'}}>{fmt(invested)}</div>
-            <div style={{fontSize:'0.6rem',color:'#333',marginTop:'0.25rem'}}>HNDQ {fmt(hndqVal)} · Gold {fmt(goldVal)}</div>
+            <div style={{fontSize:'0.6rem',color:'#333',marginTop:'0.25rem'}}>{holdings.map(h => `${h.name} ${fmt(h.current_value)}`).join(' · ')}</div>
           </div>
           <div style={{padding:'0.75rem',border:'1px solid #222'}}>
             <div style={{fontSize:'0.6rem',color:'#555',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:'0.35rem'}}>OWED (incoming)</div>
@@ -516,55 +512,162 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* ═══ CLIENT REVENUE + HNDQ PERFORMANCE ═══ */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'1rem',marginBottom:'1.5rem'}}>
-        {/* Client Revenue */}
-        <div className="card">
-          <SectionHeader title="REVENUE BY CLIENT" />
-          {clientsSorted.length > 0 ? (
-            <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
-              {clientsSorted.map(([name, amount], i) => {
-                const pct = totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
-                return (
-                  <div key={i}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.2rem',fontSize:'0.7rem'}}>
-                      <span style={{color:'#999'}}>{name}</span>
-                      <span style={{color:'#fff',fontWeight:600}}>{fmt(amount)} <span style={{color:'#555'}}>{pct}%</span></span>
-                    </div>
-                    <BlockBar value={amount} max={maxClientRev} width={24} />
-                  </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div style={{color:'#555',fontSize:'0.75rem',textAlign:'center',padding:'1rem'}}>No revenue data</div>
-          )}
-        </div>
+      {/* ═══ PORTFOLIO PERFORMANCE ═══ */}
+      <div className="card full" style={{marginBottom:'1.5rem'}}>
+        <SectionHeader title="PORTFOLIO" />
+        {(() => {
+          const totalCost = holdings.reduce((s, h) => s + (h.cost_basis || 0), 0)
+          const totalVal = holdings.reduce((s, h) => s + (h.current_value || 0), 0)
+          const totalReturn = totalVal - totalCost
+          const totalReturnPct = totalCost > 0 ? ((totalReturn / totalCost) * 100).toFixed(1) : 0
+          const isPortUp = totalReturn >= 0
 
-        {/* HNDQ Performance */}
-        <div className="card">
-          <SectionHeader title="HNDQ PERFORMANCE" />
-          {hndq ? (
-            <div style={{display:'flex',flexDirection:'column',gap:'0.5rem'}}>
-              {[
-                ['Total invested', fmtFull(hndqCost)],
-                ['Current value', fmtFull(hndqVal)],
-                ['Total return', <span style={{color: hndqReturn >= 0 ? '#22c55e' : '#ef4444'}}>{hndqReturn >= 0 ? '+' : ''}{fmtFull(hndqReturn)} ({hndqReturn >= 0 ? '+' : ''}{hndqReturnPct}%)</span>],
-                ['Avg cost/share', fmtFull(hndqAvgCost)],
-                ['Current price', fmtFull(hndqCurrentPrice)],
-                ['Shares held', `${hndqQty}`],
-                ['Holding period', `${Math.round((Date.now() - new Date('2024-05-06').getTime()) / 86400000 / 30)} months`],
-              ].map(([label, val], i) => (
-                <div key={i} style={{display:'flex',justifyContent:'space-between',fontSize:'0.75rem'}}>
-                  <span style={{color:'#555'}}>{label}</span>
-                  <span style={{color:'#fff',fontWeight:600}}>{val}</span>
-                </div>
-              ))}
+          return (
+            <div>
+              <FlashValue value={totalVal}>
+                <span style={{fontSize:'1.8rem',fontWeight:700,color:'#fff',display:'block'}}>{fmtFull(totalVal)}</span>
+              </FlashValue>
+              <div style={{display:'flex',gap:'1.5rem',marginTop:'0.35rem',marginBottom:'1rem',fontSize:'0.75rem'}}>
+                <span style={{color:'#555'}}>Invested {fmtFull(totalCost)}</span>
+                <span style={{color: isPortUp ? '#22c55e' : '#ef4444',fontWeight:600}}>
+                  {isPortUp ? '+' : ''}{fmtFull(totalReturn)} ({isPortUp ? '+' : ''}{totalReturnPct}%)
+                </span>
+              </div>
+
+              {/* Portfolio chart */}
+              {(() => {
+                // Build portfolio total value per date from price_history
+                const dateMap = {}
+                for (const h of holdings) {
+                  const history = priceHistory[h.id] || []
+                  for (const entry of history) {
+                    if (!dateMap[entry.date]) dateMap[entry.date] = 0
+                    dateMap[entry.date] += entry.value
+                  }
+                }
+                const portfolioHistory = Object.entries(dateMap).sort((a, b) => a[0].localeCompare(b[0])).map(([date, value]) => ({ date, price: value }))
+                return portfolioHistory.length >= 2 ? (
+                  <PriceChart
+                    history={portfolioHistory}
+                    holdingName="TOTAL PORTFOLIO"
+                    currentPrice={totalVal}
+                    costBasis={0}
+                  />
+                ) : null
+              })()}
+
+              {/* Allocation */}
+              <div style={{marginTop:'1.25rem'}}>
+                <div style={{fontSize:'0.65rem',color:'#555',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.5rem'}}>Allocation</div>
+                {holdings.map((h, i) => {
+                  const weight = totalVal > 0 ? (h.current_value / totalVal) : 0
+                  const pct = (weight * 100).toFixed(1)
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:'0.75rem',marginBottom:'0.35rem',fontSize:'0.75rem'}}>
+                      <span style={{color:'#999',minWidth:'50px'}}>{h.name}</span>
+                      <span style={{color:'#fff',minWidth:'70px',fontWeight:600}}>{fmtFull(h.current_value)}</span>
+                      <BlockBar value={weight} max={1} width={20} />
+                      <span style={{color:'#555',minWidth:'40px'}}>{pct}%</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          ) : (
-            <div style={{color:'#555',fontSize:'0.75rem',textAlign:'center',padding:'1rem'}}>No HNDQ data</div>
-          )}
-        </div>
+          )
+        })()}
+      </div>
+
+      {/* ═══ INDIVIDUAL HOLDINGS ═══ */}
+      <div className="card full" style={{marginBottom:'1.5rem'}}>
+        <SectionHeader title="HOLDINGS" />
+        {holdings.map((h, i) => {
+          const gain = (h.current_value || 0) - (h.cost_basis || 0)
+          const gainPct = h.cost_basis > 0 ? ((gain / h.cost_basis) * 100).toFixed(1) : 0
+          const isUp = gain >= 0
+          const isExpanded = selectedHolding?.id === h.id
+          const unitLabel = h.type === 'commodity' ? `${h.quantity}g` : `${h.quantity} shares`
+          const avgCost = h.quantity > 0 ? h.cost_basis / h.quantity : 0
+
+          return (
+            <div key={i}>
+              <div
+                style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0.6rem 0',borderBottom:'1px solid #1a1a1a',cursor:'pointer',fontSize:'0.75rem'}}
+                onClick={() => setSelectedHolding(prev => prev?.id === h.id ? null : h)}
+              >
+                <div style={{display:'flex',gap:'1rem',alignItems:'baseline'}}>
+                  <span style={{color:'#fff',fontWeight:600,minWidth:'50px'}}>{h.name}</span>
+                  <span style={{color:'#555'}}>{unitLabel}</span>
+                  <span style={{color:'#fff',fontWeight:600}}>{fmtFull(h.current_value)}</span>
+                </div>
+                <div style={{display:'flex',gap:'0.75rem',alignItems:'baseline'}}>
+                  <span style={{color: isUp ? '#22c55e' : '#ef4444',fontWeight:600}}>
+                    {isUp ? '+' : ''}{fmtFull(gain)} ({isUp ? '+' : ''}{gainPct}%)
+                  </span>
+                  <span style={{color:'#555',fontSize:'0.85rem'}}>{isExpanded ? '▾' : '▸'}</span>
+                </div>
+              </div>
+              {isExpanded && (
+                <div style={{padding:'0.75rem 0',borderBottom:'1px solid #1a1a1a'}}>
+                  <PriceChart
+                    history={priceHistory[h.id] || []}
+                    holdingName={h.name}
+                    currentPrice={h.current_price}
+                    costBasis={avgCost}
+                    purchaseLots={purchaseLots.filter(l => l.holding_id === h.id)}
+                  />
+                  <div style={{display:'flex',flexWrap:'wrap',gap:'1.5rem',marginTop:'0.75rem',fontSize:'0.7rem'}}>
+                    {[
+                      ['Cost basis', fmtFull(h.cost_basis)],
+                      ['Avg cost/' + (h.type === 'commodity' ? 'g' : 'share'), fmtFull(avgCost)],
+                      ['Current price', fmtFull(h.current_price)],
+                      ['Quantity', h.type === 'commodity' ? `${h.quantity}g` : `${h.quantity}`],
+                    ].map(([label, val], j) => (
+                      <div key={j}>
+                        <div style={{color:'#555',fontSize:'0.6rem',textTransform:'uppercase',letterSpacing:'0.05em'}}>{label}</div>
+                        <div style={{color:'#fff',fontWeight:600}}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {purchaseLots.filter(l => l.holding_id === h.id).length > 0 && (
+                    <div style={{marginTop:'0.75rem'}}>
+                      <div style={{fontSize:'0.6rem',color:'#555',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:'0.35rem'}}>Purchase Lots</div>
+                      {purchaseLots.filter(l => l.holding_id === h.id).map((lot, k) => (
+                        <div key={k} style={{display:'flex',gap:'1rem',fontSize:'0.65rem',color:'#999',marginBottom:'0.2rem'}}>
+                          <span>{lot.purchase_date}</span>
+                          <span>{lot.quantity} × {fmtFull(lot.price_per_unit)}</span>
+                          <span style={{color:'#555'}}>{fmtFull(lot.total_cost)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* ═══ CLIENT REVENUE ═══ */}
+      <div className="card full" style={{marginBottom:'1.5rem'}}>
+        <SectionHeader title="REVENUE BY CLIENT" />
+        {clientsSorted.length > 0 ? (
+          <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+            {clientsSorted.map(([name, amount], i) => {
+              const pct = totalIncome > 0 ? Math.round((amount / totalIncome) * 100) : 0
+              return (
+                <div key={i}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.2rem',fontSize:'0.7rem'}}>
+                    <span style={{color:'#999'}}>{name}</span>
+                    <span style={{color:'#fff',fontWeight:600}}>{fmt(amount)} <span style={{color:'#555'}}>{pct}%</span></span>
+                  </div>
+                  <BlockBar value={amount} max={maxClientRev} width={24} />
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div style={{color:'#555',fontSize:'0.75rem',textAlign:'center',padding:'1rem'}}>No revenue data</div>
+        )}
       </div>
 
       {/* ═══ ACCOUNT CARDS ═══ */}
@@ -587,18 +690,7 @@ export default function FinancePage() {
         })}
       </div>
 
-      {/* Holdings detail */}
-      {selectedHolding && (
-        <div className="card full" style={{marginBottom:'1.5rem'}}>
-          <PriceChart
-            history={priceHistory[selectedHolding.id] || []}
-            holdingName={selectedHolding.name}
-            currentPrice={selectedHolding.current_price}
-            costBasis={selectedHolding.cost_basis / selectedHolding.quantity}
-            purchaseLots={purchaseLots.filter(l => l.holding_id === selectedHolding.id)}
-          />
-        </div>
-      )}
+      {/* Holdings detail moved to inline expand in HOLDINGS section */}
 
       {/* ═══ FREELANCE PIPELINE ═══ */}
       <div className="card full" style={{marginBottom:'1.5rem'}}>
