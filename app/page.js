@@ -5,8 +5,6 @@ import CommandToolbar from './components/CommandToolbar'
 import FocusOverlay from './components/FocusOverlay'
 import TasksModule from './components/TasksModule'
 import AgentsModule from './components/AgentsModule'
-import FinanceModule from './components/FinanceModule'
-import FreelanceModule from './components/FreelanceModule'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 import { NotificationProvider } from './context/NotificationContext'
 import ToastNotifications from './components/notifications/ToastNotifications'
@@ -84,7 +82,7 @@ const bootSequence = [
 // === MAIN ===
 export default function Home() {
   const [data, setData] = useState(null)
-  const [unlocked, setUnlocked] = useState(false)
+  const [unlocked] = useState(false)
   const [booted, setBooted] = useState(false)
   const [bootLines, setBootLines] = useState([])
   const [captureOpen, setCaptureOpen] = useState(false)
@@ -162,7 +160,7 @@ export default function Home() {
       <CommandToolbar 
         onCapture={() => setCaptureOpen(true)}
         unlocked={unlocked}
-        onLock={() => { setUnlocked(false); sessionStorage.removeItem('woozy-unlocked') }}
+        onLock={() => {}}
         focusMode={focusMode}
         setFocusMode={setFocusMode}
         contextMode={contextMode}
@@ -205,18 +203,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* === SECTION 3: FINANCES === */}
-        {(contextMode === 'personal' || contextMode === 'work') && (
-          <ErrorBoundary name="Finance">
-            <FinanceModule 
-              data={data} 
-              unlocked={unlocked} 
-              onUnlock={() => { setUnlocked(true); sessionStorage.setItem('woozy-unlocked', 'true') }} 
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Freelance pipeline is now integrated into FinanceModule */}
+        {/* Finance accessible via $ toolbar button → /finance */}
       </div>
 
       <div className="last-updated">

@@ -24,6 +24,9 @@ export async function GET() {
     let goals = []
     try { goals = db.prepare('SELECT * FROM financial_goals ORDER BY id').all() } catch {}
 
+    let purchaseLots = []
+    try { purchaseLots = db.prepare('SELECT * FROM purchase_lots ORDER BY holding_id, purchase_date ASC').all() } catch {}
+
     const freelanceProjects = db.prepare(`
       SELECT p.*,
         COALESCE(SUM(CASE WHEN tr.type = 'income' AND tr.status = 'completed' THEN tr.amount ELSE 0 END), 0) as total_paid,
@@ -82,6 +85,11 @@ export async function GET() {
       freelanceProjects: freelanceProjects.map(p => ({
         id: p.id, name: p.name, client_name: p.client_name, status: p.status,
         total_value: p.total_value, total_paid: p.total_paid, total_pending: p.total_pending,
+      })),
+      purchaseLots: purchaseLots.map(l => ({
+        id: l.id, holding_id: l.holding_id, quantity: l.quantity,
+        price_per_unit: l.price_per_unit, total_cost: l.total_cost,
+        purchase_date: l.purchase_date, type: l.type || 'buy', notes: l.notes,
       })),
       summary: {
         netWorth, liquid, invested: totalInvestmentValue, receivables,

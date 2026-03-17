@@ -74,8 +74,9 @@ function DonutChart({ segments, size = 140 }) {
 }
 
 // === PRICE CHART ===
-function PriceChart({ history, holdingName, currentPrice, costBasis }) {
+function PriceChart({ history, holdingName, currentPrice, costBasis, purchaseLots = [] }) {
   const [period, setPeriod] = useState('ALL')
+  const [tooltip, setTooltip] = useState(null)
   const periods = ['1D', '1W', '1M', '3M', '1Y', 'ALL']
 
   const filtered = useMemo(() => {
@@ -96,16 +97,56 @@ function PriceChart({ history, holdingName, currentPrice, costBasis }) {
   const changePct = firstPrice > 0 ? ((change / firstPrice) * 100).toFixed(2) : 0
   const isUp = change >= 0
 
-  const w = 800, h = 220, padL = 55, padR = 20, padT = 15, padB = 25
+  const w = 800, h = 220, padL = 55, padR = 50, padT = 15, padB = 25
   const prices = data.map(d => d.price)
-  const minP = Math.min(...prices) * 0.995, maxP = Math.max(...prices) * 1.005, rangeP = maxP - minP || 1
+  
+  // Include cost basis in min/max calculation so avg line is always visible
+  const allVals = [...prices, ...(costBasis > 0 ? [costBasis] : [])]
+  const minP = Math.min(...allVals) * 0.995, maxP = Math.max(...allVals) * 1.005, rangeP = maxP - minP || 1
+  
+  const dateToX = (dateStr) => {
+    const idx = data.findIndex(d => d.date === dateStr)
+    if (idx >= 0) return padL + (idx / Math.max(data.length - 1, 1)) * (w - padL - padR)
+    // Interpolate for dates between data points
+    for (let i = 0; i < data.length - 1; i++) {
+      if (dateStr > data[i].date && dateStr < data[i + 1].date) {
+        const t = 0.5 // approximate midpoint
+        return padL + ((i + t) / Math.max(data.length - 1, 1)) * (w - padL - padR)
+      }
+    }
+    return null
+  }
+  
+  const priceToY = (price) => padT + (1 - (price - minP) / rangeP) * (h - padT - padB)
+  
   const points = prices.map((p, i) => ({
     x: padL + (i / Math.max(prices.length - 1, 1)) * (w - padL - padR),
-    y: padT + (1 - (p - minP) / rangeP) * (h - padT - padB)
+    y: priceToY(p)
   }))
 
+  // Compute marker positions for purchase lots
+  const markers = useMemo(() => {
+    return purchaseLots.map(lot => {
+      const x = dateToX(lot.purchase_date)
+      if (x === null) return null
+      // Find price at that date (or nearest)
+      const exactPoint = data.find(d => d.date === lot.purchase_date)
+      const price = exactPoint ? exactPoint.price : lot.price_per_unit
+      const y = priceToY(price)
+      return { ...lot, x, y, price }
+    }).filter(Boolean)
+  }, [data, purchaseLots])
+
+  // Average cost basis
+  const avgCostY = costBasis > 0 ? priceToY(costBasis) : null
+
+  const fmtDate = (dateStr) => {
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
   return (
-    <div style={{marginTop:'1.5rem',paddingTop:'1rem',borderTop:'1px solid #1a1a1a'}}>
+    <div style={{marginTop:'1.5rem',paddingTop:'1rem',borderTop:'1px solid #1a1a1a',position:'relative'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem',marginBottom:'0.75rem'}}>
         <div>
           <span style={{fontFamily:'JetBrains Mono',fontSize:'0.85rem',color:'#fff',fontWeight:600,marginRight:'0.75rem'}}>{holdingName}</span>
@@ -121,7 +162,8 @@ function PriceChart({ history, holdingName, currentPrice, costBasis }) {
           ))}
         </div>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%',height:'auto',maxHeight:'220px'}}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%',height:'auto',maxHeight:'220px'}}
+        onMouseLeave={() => setTooltip(null)}>
         {[0, 0.25, 0.5, 0.75, 1].map(pct => {
           const val = minP + pct * rangeP
           const y = padT + (1 - pct) * (h - padT - padB)
@@ -131,9 +173,66 @@ function PriceChart({ history, holdingName, currentPrice, costBasis }) {
           <text x={padL} y={h-5} fill="#333" fontSize="7" fontFamily="JetBrains Mono">{data[0].date}</text>
           <text x={w-padR} y={h-5} fill="#333" fontSize="7" fontFamily="JetBrains Mono" textAnchor="end">{data[data.length-1].date}</text>
         </>}
+        
+        {/* Average cost basis line */}
+        {avgCostY !== null && avgCostY >= padT && avgCostY <= h - padB && <>
+          <line x1={padL} y1={avgCostY} x2={w - padR} y2={avgCostY}
+            stroke="#444" strokeWidth="1" strokeDasharray="4 3" />
+          <text x={w - padR + 4} y={avgCostY + 3} fill="#444" fontSize="7" fontFamily="JetBrains Mono" textAnchor="start">
+            AVG ${costBasis.toFixed(2)}
+          </text>
+        </>}
+        
+        {/* Price line */}
         <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#fff" strokeWidth="1.5" />
         {points.length <= 30 && points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#fff" />)}
+        
+        {/* Trade markers */}
+        {markers.map((m, i) => {
+          const isBuy = (m.type || 'buy') === 'buy'
+          const color = isBuy ? '#22c55e' : '#ef4444'
+          const triSize = 5
+          const triPoints = isBuy
+            ? `${m.x},${m.y - triSize - 2} ${m.x - triSize},${m.y + triSize - 2} ${m.x + triSize},${m.y + triSize - 2}`
+            : `${m.x - triSize},${m.y - triSize + 2} ${m.x + triSize},${m.y - triSize + 2} ${m.x},${m.y + triSize + 2}`
+          return (
+            <g key={`marker-${i}`}
+              onMouseEnter={() => setTooltip(m)}
+              onMouseLeave={() => setTooltip(null)}
+              style={{cursor:'pointer'}}>
+              {/* Vertical dashed anchor line */}
+              <line x1={m.x} y1={m.y} x2={m.x} y2={h - padB}
+                stroke="#333" strokeWidth="0.75" strokeDasharray="2 2" />
+              {/* Triangle marker */}
+              <polygon points={triPoints} fill={color} stroke={color} strokeWidth="0.5" />
+            </g>
+          )
+        })}
       </svg>
+      
+      {/* Tooltip */}
+      {tooltip && (
+        <div style={{
+          position:'absolute',
+          left: `${(tooltip.x / w) * 100}%`,
+          top: '2rem',
+          transform: tooltip.x > w * 0.7 ? 'translateX(-100%)' : 'translateX(-50%)',
+          background:'#111',
+          border:'1px solid #222',
+          padding:'0.4rem 0.6rem',
+          fontFamily:'JetBrains Mono',
+          fontSize:'11px',
+          color:'#fff',
+          whiteSpace:'nowrap',
+          zIndex:10,
+          pointerEvents:'none',
+        }}>
+          <span style={{color: (tooltip.type || 'buy') === 'buy' ? '#22c55e' : '#ef4444', fontWeight:600}}>
+            {(tooltip.type || 'buy').toUpperCase()}
+          </span>
+          {': '}{tooltip.quantity} shares @ {fmt(tooltip.price_per_unit)} · {fmtDate(tooltip.purchase_date)}
+        </div>
+      )}
     </div>
   )
 }
@@ -262,9 +361,8 @@ export default function FinancePage() {
   if (!unlocked) {
     return (
       <NotificationProvider>
-        <div style={{maxWidth:'1400px',margin:'0 auto',padding:'2rem'}}>
-          <CommandToolbar {...toolbarProps} />
-          <div className="card full"><PinLock onUnlock={handleUnlock} /></div>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#0a0a0a',display:'flex',alignItems:'center',justifyContent:'center',zIndex:100}}>
+          <PinLock onUnlock={handleUnlock} />
         </div>
       </NotificationProvider>
     )
@@ -319,6 +417,7 @@ export default function FinancePage() {
 
   return (
     <NotificationProvider>
+    <DecryptReveal unlocked={unlocked}>
     <div style={{maxWidth:'1400px',margin:'0 auto',padding:'1.5rem',fontFamily:'JetBrains Mono, monospace'}}>
       <CommandToolbar {...toolbarProps} />
 
@@ -582,6 +681,7 @@ export default function FinancePage() {
         WOOZY FINANCE · LAST UPDATE {new Date(data.updated).toLocaleString('en-AU', {hour:'2-digit',minute:'2-digit',hour12:false})}
       </div>
     </div>
+    </DecryptReveal>
     </NotificationProvider>
   )
 }
