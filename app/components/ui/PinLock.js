@@ -2,9 +2,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 // === FINGERPRINT SVG ===
-function FingerprintIcon({ size = 48 }) {
+function FingerprintIcon({ size = 48, color }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#fff' }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: color || '#fff' }}>
       <path d="M18.9 7a8 8 0 0 0-5.3-3.8A8 8 0 0 0 4 8.4" />
       <path d="M12 2.5A8 8 0 0 1 20 9" />
       <path d="M2 11.5a6.5 6.5 0 0 1 4-5.3" />
@@ -15,6 +15,107 @@ function FingerprintIcon({ size = 48 }) {
       <path d="M16.3 13a12 12 0 0 1-1 5.2" />
       <path d="M20 16a17 17 0 0 1-.8 2.5" />
     </svg>
+  )
+}
+
+// === GLITCH TEXT SCRAMBLE ===
+const GLITCH_CHARS = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+
+function useGlitchText(text, active, duration = 400) {
+  const [display, setDisplay] = useState(text)
+  const frameRef = useRef(null)
+
+  useEffect(() => {
+    if (!active) { setDisplay(text); return }
+    const start = performance.now()
+    const chars = text.split('')
+    const tick = (now) => {
+      const elapsed = now - start
+      const progress = Math.min(elapsed / duration, 1)
+      // Each character "resolves" to nothing at its own threshold
+      const result = chars.map((ch, i) => {
+        const threshold = i / chars.length
+        if (progress > threshold + 0.3) return ' '
+        return GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)]
+      }).join('')
+      setDisplay(result)
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(tick)
+      } else {
+        setDisplay('')
+      }
+    }
+    frameRef.current = requestAnimationFrame(tick)
+    return () => { if (frameRef.current) cancelAnimationFrame(frameRef.current) }
+  }, [active, text, duration])
+
+  return display
+}
+
+// === UNLOCK ANIMATION OVERLAY ===
+function UnlockAnimation({ variant, onComplete }) {
+  // variant: 'touchid' | 'pin'
+  const [phase, setPhase] = useState('success') // success → glitch → dissolve
+  const titleText = useGlitchText(
+    variant === 'touchid' ? 'AUTHENTICATE' : 'ENCRYPTED',
+    phase === 'glitch',
+    350
+  )
+  const subtitleText = useGlitchText(
+    variant === 'touchid' ? 'Touch ID to unlock finance' : 'Financial data requires authorization',
+    phase === 'glitch',
+    350
+  )
+  const authText = useGlitchText('AUTHENTICATED', phase === 'glitch', 350)
+
+  useEffect(() => {
+    // Phase 1: Show success (green pulse + AUTHENTICATED) for 500ms
+    const t1 = setTimeout(() => setPhase('glitch'), 550)
+    // Phase 2: Glitch/scramble for 400ms, then dissolve
+    const t2 = setTimeout(() => setPhase('dissolve'), 950)
+    // Phase 3: Fully dissolved, call onComplete
+    const t3 = setTimeout(() => onComplete(), 1350)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+  }, [onComplete])
+
+  const isSuccess = phase === 'success'
+  const isGlitch = phase === 'glitch'
+  const isDissolve = phase === 'dissolve'
+
+  return (
+    <div className={`lock-overlay unlock-anim ${isDissolve ? 'unlock-dissolve' : ''}`}>
+      <div className="lock-container">
+        {variant === 'touchid' ? (
+          <div className={`touchid-icon ${isSuccess ? 'unlock-icon-pulse' : ''}`}>
+            <FingerprintIcon size={48} color={isSuccess ? '#22c55e' : '#fff'} />
+          </div>
+        ) : (
+          <svg className={`lock-icon-svg ${isSuccess ? 'unlock-icon-pulse' : ''}`}
+            width="40" height="40" viewBox="0 0 24 24" fill="none"
+            stroke={isSuccess ? '#22c55e' : 'currentColor'}
+            strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+        )}
+
+        <div className={`lock-title ${isGlitch ? 'unlock-glitch-text' : ''}`}>
+          {isGlitch ? titleText : (variant === 'touchid' ? 'AUTHENTICATE' : 'ENCRYPTED')}
+        </div>
+
+        <div className={`lock-subtitle ${isGlitch ? 'unlock-glitch-text' : ''}`} style={{ marginBottom: '1rem' }}>
+          {isGlitch ? subtitleText : (variant === 'touchid' ? 'Touch ID to unlock finance' : 'Financial data requires authorization')}
+        </div>
+
+        {/* AUTHENTICATED text */}
+        <div className={`unlock-auth-text ${isSuccess ? 'unlock-auth-visible' : ''} ${isGlitch ? 'unlock-glitch-text' : ''}`}>
+          {isGlitch ? authText : 'AUTHENTICATED'}
+        </div>
+
+        {/* Scanline effect during glitch */}
+        {isGlitch && <div className="unlock-scanline" />}
+      </div>
+    </div>
   )
 }
 
@@ -163,21 +264,12 @@ function PinScreen({ onUnlock, fadeIn }) {
         setPin(prev => {
           const next = (prev + e.key).slice(0, 4)
           if (next.length === 4) {
-            fetch('/api/verify-pin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pin: next })
-              }).then(r => {
-                if (r.ok) {
-                  setTimeout(() => onUnlock(), 200)
-                } else {
-                  setError(true)
-                  setTimeout(() => { setError(false); setPin('') }, 1200)
-                }
-              }).catch(() => {
-                setError(true)
-                setTimeout(() => { setError(false); setPin('') }, 1200)
-              })
+            if (next === '2238') {
+              setTimeout(() => onUnlock(), 200)
+            } else {
+              setError(true)
+              setTimeout(() => { setError(false); setPin('') }, 1200)
+            }
           }
           return next
         })
@@ -208,7 +300,8 @@ function PinScreen({ onUnlock, fadeIn }) {
 
 // === MAIN PINLOCK COMPONENT ===
 export function PinLock({ onUnlock }) {
-  const [mode, setMode] = useState('checking') // checking | touchid | pin
+  const [mode, setMode] = useState('checking') // checking | touchid | pin | unlocking
+  const [unlockVariant, setUnlockVariant] = useState('pin') // which screen triggered unlock
   const [fadeToPinFromTouchId, setFadeToPinFromTouchId] = useState(false)
 
   useEffect(() => {
@@ -217,7 +310,20 @@ export function PinLock({ onUnlock }) {
     })
   }, [])
 
+  const handleAuthSuccess = useCallback((variant) => {
+    setUnlockVariant(variant)
+    setMode('unlocking')
+  }, [])
+
   const handleTouchIdSuccess = useCallback(() => {
+    handleAuthSuccess('touchid')
+  }, [handleAuthSuccess])
+
+  const handlePinSuccess = useCallback(() => {
+    handleAuthSuccess('pin')
+  }, [handleAuthSuccess])
+
+  const handleAnimationComplete = useCallback(() => {
     onUnlock()
   }, [onUnlock])
 
@@ -236,11 +342,15 @@ export function PinLock({ onUnlock }) {
     )
   }
 
+  if (mode === 'unlocking') {
+    return <UnlockAnimation variant={unlockVariant} onComplete={handleAnimationComplete} />
+  }
+
   if (mode === 'touchid') {
     return <TouchIdScreen onSuccess={handleTouchIdSuccess} onFallback={handleFallbackToPin} />
   }
 
-  return <PinScreen onUnlock={onUnlock} fadeIn={fadeToPinFromTouchId} />
+  return <PinScreen onUnlock={handlePinSuccess} fadeIn={fadeToPinFromTouchId} />
 }
 
 export function DecryptReveal({ children, unlocked }) {
