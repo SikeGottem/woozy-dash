@@ -104,11 +104,12 @@ export default function Home() {
   }, [])
   
   useEffect(() => {
-    const fetchData = () => fetch('/api/data').then(r => r.json()).then(setData).catch(() => {})
+    const modeParam = contextMode && contextMode !== 'deep' ? `?mode=${contextMode}` : ''
+    const fetchData = () => fetch(`/api/data${modeParam}`).then(r => r.json()).then(setData).catch(() => {})
     fetchData()
     const interval = setInterval(fetchData, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [contextMode])
 
   useEffect(() => {
     document.body.setAttribute('data-focus-mode', focusMode.toString())

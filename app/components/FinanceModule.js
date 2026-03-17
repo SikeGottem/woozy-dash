@@ -1,9 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { fmt, parseAmt, COLORS } from '../lib/helpers'
+import { fmt, COLORS } from '../lib/helpers'
 import DonutChart from './charts/DonutChart'
-import BarChart from './charts/BarChart'
-import StackedBar from './charts/StackedBar'
 import MiniStat from './ui/MiniStat'
 
 // === PIN LOCK ===
@@ -68,144 +66,218 @@ function DecryptReveal({ children, unlocked }) {
 
 export { PinLock, DecryptReveal }
 
+// === NET WORTH LINE CHART (SVG) ===
+function NetWorthLine({ snapshots }) {
+  if (!snapshots || snapshots.length < 2) {
+    return <div className="empty-visual"><div className="empty-icon">—</div><div>Not enough data for trend</div><div className="empty-sub">Snapshots build over time</div></div>
+  }
+  const w = 400, h = 120, pad = 30
+  const vals = snapshots.map(s => s.total)
+  const min = Math.min(...vals) * 0.95
+  const max = Math.max(...vals) * 1.05
+  const range = max - min || 1
+  const points = vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * (w - pad * 2)
+    const y = h - pad - ((v - min) / range) * (h - pad * 2)
+    return `${x},${y}`
+  })
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} className="nw-line-chart" style={{width:'100%',height:'auto'}}>
+      <polyline points={points.join(' ')} fill="none" stroke="#fff" strokeWidth="1.5" />
+      {vals.map((v, i) => {
+        const x = pad + (i / (vals.length - 1)) * (w - pad * 2)
+        const y = h - pad - ((v - min) / range) * (h - pad * 2)
+        return <circle key={i} cx={x} cy={y} r="3" fill="#fff" />
+      })}
+      <text x={pad} y={h - 5} fill="#555" fontSize="9" fontFamily="JetBrains Mono">{snapshots[0].date}</text>
+      <text x={w - pad} y={h - 5} fill="#555" fontSize="9" fontFamily="JetBrains Mono" textAnchor="end">{snapshots[snapshots.length-1].date}</text>
+    </svg>
+  )
+}
+
+// === INCOME VS EXPENSE BARS (last 6 months) ===
+function IncomeExpenseBars({ transactions }) {
+  const months = []
+  const now = new Date()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+    const label = d.toLocaleString('en-AU', { month: 'short' })
+    months.push({ key, label, income: 0, expense: 0 })
+  }
+  for (const tr of transactions) {
+    const m = tr.date?.slice(0, 7)
+    const month = months.find(mo => mo.key === m)
+    if (month) {
+      if (tr.type === 'income' && tr.status === 'completed') month.income += tr.amount
+      if (tr.type === 'expense' && tr.status === 'completed') month.expense += tr.amount
+    }
+  }
+  const maxVal = Math.max(...months.map(m => Math.max(m.income, m.expense)), 1)
+  return (
+    <div className="ie-bars">
+      {months.map((m, i) => (
+        <div key={i} className="ie-month">
+          <div className="ie-col">
+            <div className="ie-bar ie-bar-income" style={{height: `${(m.income / maxVal) * 80}px`}} title={fmt(m.income)} />
+            <div className="ie-bar ie-bar-expense" style={{height: `${(m.expense / maxVal) * 80}px`}} title={fmt(m.expense)} />
+          </div>
+          <div className="ie-label">{m.label}</div>
+        </div>
+      ))}
+      <div className="ie-legend">
+        <span style={{color:'#22c55e',fontSize:'0.65rem'}}>■ income</span>
+        <span style={{color:'#ef4444',fontSize:'0.65rem'}}>■ expense</span>
+      </div>
+    </div>
+  )
+}
+
 export default function FinanceModule({ data, unlocked, onUnlock }) {
-  const a = data.assets || {}
-  const incomeList = data.income || []
-  const expenseList = data.expenses || []
-  const totalIncome = incomeList.filter(r => (r.status === 'paid' || r.status === 'completed')).reduce((s, r) => s + parseAmt(r.amount), 0)
-  const pendingIncome = incomeList.filter(r => r.status === 'pending').reduce((s, r) => s + parseAmt(r.amount), 0)
-  const totalExpenses = expenseList.reduce((s, r) => s + parseAmt(r.amount), 0)
-  const totalAssets = a.checking + a.savings + a.cash + a.investments + (a.gold?.value || 0) + a.receivables
+  const accounts = data.accounts || []
+  const transactions = data.transactions || []
+  const netWorthHistory = data.netWorthHistory || []
+  const summary = data.summary || {}
+  const freelanceProjects = data.freelanceProjects || []
 
-  const assetSegments = [
-    { label: 'Checking', value: a.checking, color: COLORS.checking },
-    { label: 'Savings', value: a.savings, color: COLORS.savings },
-    { label: 'Cash', value: a.cash, color: COLORS.cash },
-    { label: 'Investments', value: a.investments, color: COLORS.investments },
-    { label: 'Gold', value: a.gold?.value || 0, color: COLORS.gold },
-    { label: 'Receivables', value: a.receivables, color: COLORS.receivables },
-  ].filter(s => s.value > 0)
+  // Asset allocation segments from accounts
+  const acctColors = {
+    'Checking': 'rgba(255,255,255,0.9)',
+    'Savings': 'rgba(255,255,255,0.6)',
+    'Cash': 'rgba(255,255,255,0.35)',
+    'Investments': 'rgba(0,255,65,0.7)',
+    'Gold': 'rgba(0,255,65,0.45)',
+  }
+  const assetSegments = accounts.map(a => ({
+    label: a.name, value: a.balance, color: acctColors[a.name] || '#666'
+  })).filter(s => s.value > 0)
+  const totalAssets = assetSegments.reduce((s, a) => s + a.value, 0)
 
-  const incomeByClient = incomeList.filter(r => (r.status === 'paid' || r.status === 'completed')).reduce((acc, r) => {
-    const key = r.client || r.source || 'Other'
-    acc[key] = (acc[key] || 0) + parseAmt(r.amount)
-    return acc
-  }, {})
-
-  const incomeBarItems = Object.entries(incomeByClient).map(([label, value]) => ({
-    label, value, display: fmt(value), color: '#fff'
-  })).sort((a, b) => b.value - a.value)
+  // Trend arrow
+  const lastSnapshot = netWorthHistory.length >= 2 ? netWorthHistory[netWorthHistory.length - 2] : null
+  const nwTrend = lastSnapshot ? summary.netWorth - lastSnapshot.total : 0
 
   return (
     <div className="section-finances">
       <div className="section-title">FINANCES {!unlocked && <span style={{fontSize:'0.7rem',color:'#666',marginLeft:'0.5rem'}}>// LOCKED</span>}</div>
       {!unlocked && <div className="card full"><PinLock onUnlock={onUnlock} /></div>}
       <div className="grid">
+        {/* ROW 1: Key Stats */}
         <DecryptReveal unlocked={unlocked}>
           <div className="card full">
-            <div className="nw-top">
-              <div className="nw-left">
-                <div className="section-header">Net Worth</div>
-                <div className="net-worth-value">{fmt(a.netWorth)}</div>
-                <div className="nw-stats-row">
-                  <MiniStat label="Liquid" value={fmt(a.checking + a.savings + a.cash)} color={COLORS.checking} />
-                  <MiniStat label="Invested" value={fmt(a.investments + (a.gold?.value || 0))} color={COLORS.investments} />
-                  <MiniStat label="Owed to you" value={fmt(a.receivables)} color={COLORS.receivables} />
-                </div>
-              </div>
-              <div className="nw-right">
-                <DonutChart segments={assetSegments} />
-              </div>
+            <div className="fin-stats-row">
+              <MiniStat label="Net Worth" value={fmt(summary.netWorth || 0)} sub={nwTrend !== 0 ? `${nwTrend > 0 ? '▲' : '▼'} ${fmt(Math.abs(nwTrend))}` : null} />
+              <MiniStat label="Liquid Cash" value={fmt(summary.liquid || 0)} />
+              <MiniStat label="Investments" value={fmt(summary.invested || 0)} />
+              <MiniStat label="Receivables" value={fmt(summary.receivables || 0)} color="#d97706" />
+              <MiniStat label="Month Income" value={fmt(summary.monthlyIncome || 0)} color="#22c55e" />
+              <MiniStat label="Month Spend" value={fmt(summary.monthlyExpenses || 0)} color={summary.monthlyExpenses > 0 ? '#ef4444' : '#999'} />
             </div>
-            <div className="section-header" style={{marginTop: '1.5rem'}}>Allocation</div>
-            <StackedBar segments={assetSegments} height={28} />
-            <div className="legend">
-              {assetSegments.map((s, i) => (
-                <div key={i} className="legend-item">
-                  <span className="legend-dot" style={{background: s.color}} />
-                  <span className="legend-label">{s.label}</span>
-                  <span className="legend-value">{fmt(s.value)}</span>
-                  <span className="legend-pct">{((s.value / totalAssets) * 100).toFixed(0)}%</span>
-                </div>
-              ))}
-            </div>
-            {(a.etfStatus || '').includes('Waiting') && (
-              <div className="etf-status">▲ ETF DEPLOYMENT: {fmt(a.etfPlanned)} PLANNED • {a.etfStatus.toUpperCase()}</div>
-            )}
           </div>
         </DecryptReveal>
 
+        {/* ROW 2: Charts */}
         <DecryptReveal unlocked={unlocked}>
           <div className="card">
-            <div className="section-header">Income</div>
-            <div className="income-hero-row">
-              <MiniStat label="Received" value={fmt(totalIncome)} color="#fff" />
-              <MiniStat label="Pending" value={fmt(pendingIncome)} color={COLORS.dim} />
-            </div>
-            <div className="subsection">By Client</div>
-            <BarChart items={incomeBarItems} />
-            {incomeList.filter(r => r.status !== 'paid').length > 0 && (
-              <>
-                <div className="subsection" style={{marginTop: '1rem'}}>Awaiting Payment</div>
-                <ul className="data-list">
-                  {incomeList.filter(r => r.status !== 'paid').map((item, i) => (
-                    <li key={i} className="data-item" style={{opacity: 0.5}}>
-                      <span>{item.client || item.source}</span>
-                      <span>{fmt(parseAmt(item.amount))}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </DecryptReveal>
-
-        <DecryptReveal unlocked={unlocked}>
-          <div className="card">
-            <div className="section-header">Expenses</div>
-            <div className="stat-display">
-              <div className="stat-value money-negative">{fmt(totalExpenses)}</div>
-              <div className="stat-label">Total Outflow</div>
-            </div>
-            {expenseList.length > 0 ? (
-              <ul className="data-list">
-                {expenseList.map((item, i) => (
-                  <li key={i} className="data-item">
-                    <span>{item.category} — {item.description}</span>
-                    <span className="money-negative">{fmt(parseAmt(item.amount))}</span>
-                  </li>
+            <div className="section-header">Allocation</div>
+            <div style={{display:'flex',alignItems:'center',gap:'2rem',flexWrap:'wrap'}}>
+              <DonutChart segments={assetSegments} />
+              <div className="legend" style={{flexDirection:'column'}}>
+                {assetSegments.map((s, i) => (
+                  <div key={i} className="legend-item">
+                    <span className="legend-dot" style={{background: s.color}} />
+                    <span className="legend-label">{s.label}</span>
+                    <span className="legend-value">{fmt(s.value)}</span>
+                    <span className="legend-pct">{totalAssets ? ((s.value / totalAssets) * 100).toFixed(0) + '%' : ''}</span>
+                  </div>
                 ))}
-              </ul>
-            ) : (
-              <div className="empty-visual">
-                <div className="empty-icon">—</div>
-                <div>No expenses tracked yet</div>
-                <div className="empty-sub">Tell Woozy when you spend money</div>
               </div>
-            )}
+            </div>
           </div>
         </DecryptReveal>
 
         <DecryptReveal unlocked={unlocked}>
-          <div className="card full">
+          <div className="card">
             <div className="section-header">Income vs Expenses</div>
-            <div className="vs-chart">
-              <div className="vs-bar-group">
-                <div className="vs-label">Income</div>
-                <div className="vs-track"><div className="vs-fill vs-income" style={{width: `${totalIncome > 0 ? 100 : 0}%`}} /></div>
-                <div className="vs-amount">{fmt(totalIncome)}</div>
-              </div>
-              <div className="vs-bar-group">
-                <div className="vs-label">Expenses</div>
-                <div className="vs-track"><div className="vs-fill vs-expense" style={{width: `${totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0}%`}} /></div>
-                <div className="vs-amount">{fmt(totalExpenses)}</div>
-              </div>
-              <div className="vs-bar-group">
-                <div className="vs-label">Net</div>
-                <div className="vs-track"><div className="vs-fill vs-net" style={{width: `${totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0}%`}} /></div>
-                <div className="vs-amount" style={{color: '#22c55e'}}>{fmt(totalIncome - totalExpenses)}</div>
-              </div>
+            <IncomeExpenseBars transactions={transactions} />
+            <div style={{marginTop:'1.5rem'}}>
+              <div className="section-header">Net Worth Trend</div>
+              <NetWorthLine snapshots={netWorthHistory} />
             </div>
+          </div>
+        </DecryptReveal>
+
+        {/* ROW 3: Recent Transactions */}
+        <DecryptReveal unlocked={unlocked}>
+          <div className="card full">
+            <div className="section-header">Recent Transactions</div>
+            {transactions.length > 0 ? (
+              <div className="fin-tx-table">
+                <div className="fin-tx-header">
+                  <span>Date</span><span>Description</span><span>Category</span><span>Amount</span><span>Account</span><span>Status</span>
+                </div>
+                {transactions.slice(0, 15).map((tr, i) => {
+                  const isIncome = tr.type === 'income'
+                  const isPending = tr.status === 'pending'
+                  return (
+                    <div key={i} className={`fin-tx-row ${isPending ? 'fin-tx-pending' : ''}`}>
+                      <span className="fin-tx-date">{tr.date}</span>
+                      <span className="fin-tx-desc">{tr.description}{tr.project_name ? ` — ${tr.project_name}` : ''}</span>
+                      <span className="fin-tx-cat">{tr.category || '—'}</span>
+                      <span className={isIncome ? 'money-positive' : 'money-negative'}>
+                        {isIncome ? '+' : '-'}{fmt(tr.amount)}
+                      </span>
+                      <span className="fin-tx-acct">{tr.account_name || '—'}</span>
+                      <span className={`status-tag ${tr.status === 'completed' ? 'status-active' : tr.status === 'pending' ? 'status-pending' : 'status-inactive'}`}>{tr.status}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="empty-visual"><div className="empty-icon">—</div><div>No transactions yet</div></div>
+            )}
+          </div>
+        </DecryptReveal>
+
+        {/* ROW 4: Freelance Pipeline */}
+        <DecryptReveal unlocked={unlocked}>
+          <div className="card full">
+            <div className="section-header">Freelance Pipeline</div>
+            {freelanceProjects.length > 0 ? (
+              <div className="fin-pipeline">
+                {freelanceProjects.map((p, i) => {
+                  const totalVal = p.total_value || 0
+                  const paid = p.total_paid || 0
+                  const pending = p.total_pending || 0
+                  const paidPct = totalVal > 0 ? (paid / totalVal) * 100 : 0
+                  return (
+                    <div key={i} className="fin-pipeline-item">
+                      <div className="fin-pipeline-top">
+                        <span className="fin-pipeline-name">{p.name}</span>
+                        <span className={`status-tag ${p.status === 'active' ? 'status-active' : p.status === 'done' ? 'status-inactive' : 'status-pending'}`}>{p.status}</span>
+                      </div>
+                      {totalVal > 0 && (
+                        <>
+                          <div className="fin-pipeline-bar-track">
+                            <div className="fin-pipeline-bar-fill" style={{width: `${paidPct}%`}} />
+                          </div>
+                          <div className="fin-pipeline-nums">
+                            <span style={{color:'#22c55e'}}>{fmt(paid)} paid</span>
+                            {pending > 0 && <span style={{color:'#d97706'}}>{fmt(pending)} pending</span>}
+                            <span style={{color:'#555'}}>{fmt(totalVal)} total</span>
+                          </div>
+                        </>
+                      )}
+                      {!totalVal && p.client_name && (
+                        <div style={{fontSize:'0.75rem',color:'#555'}}>Client: {p.client_name} — no contract value set</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="empty-visual"><div className="empty-icon">—</div><div>No freelance projects</div></div>
+            )}
           </div>
         </DecryptReveal>
       </div>

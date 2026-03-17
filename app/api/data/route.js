@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
 import { join } from 'path'
 
 const dbPath = process.env.WOOZY_DB_PATH || join(process.env.HOME, '.openclaw', 'workspace', 'woozy.db')
@@ -33,10 +32,17 @@ function formatTask(task, project = null) {
     due_date: task.due_date,
     urgency: calculateUrgency(task.due_date),
     project_id: task.project_id,
-    project_name: project?.name || null,
-    project_color: project?.color || '#3b82f6',
-    project_type: project?.type || 'personal',
-    category: project?.type || 'personal',
+    project_name: task.project_name || project?.name || null,
+    project_color: task.project_color || project?.color || '#3b82f6',
+    project_type: task.project_type || project?.type || 'personal',
+    category: task.category || project?.type || 'personal',
+    energy_required: task.energy_required || 'medium',
+    parent_id: task.parent_id || null,
+    blocked_reason: task.blocked_reason || null,
+    actual_minutes: task.actual_minutes || null,
+    estimated_minutes: task.estimated_minutes || null,
+    context: task.context || null,
+    completed_by: task.completed_by || null,
     section: task.section || 'this_week',
     sort_order: task.sort_order,
     completed_at: task.completed_at,
@@ -123,43 +129,127 @@ function formatHabit(habit, todayLog = null) {
   }
 }
 
-function parseAssets() {
-  try {
-    const assetsPath = join(process.env.HOME, 'Desktop', 'WOOZY', 'LIFE', 'Finances', 'assets.md')
-    const md = readFileSync(assetsPath, 'utf-8')
-    
-    const checking = md.match(/Checking account:\*\*\s*\$([\d,]+)/)
-    const savings = md.match(/Savings account:\*\*\s*\$([\d,]+)/)
-    const cash = md.match(/Physical cash:\*\*\s*\$([\d,]+)/)
-    const investments = md.match(/Brokerage\/investments:\*\*\s*\$([\d,]+)/)
-    const goldMatch = md.match(/Gold \(physical\):\*\*\s*(\d+)g.*~\$([\d,]+)/)
-    const receivables = md.match(/Receivables[^|]*\|\s*\$([\d,]+)/)
-    const netWorth = md.match(/Total Net Worth\*\*\s*\|\s*\*\*\$([\d,]+)/)
-    
-    return {
-      checking: checking ? parseInt(checking[1].replace(/,/g, '')) : 0,
-      savings: savings ? parseInt(savings[1].replace(/,/g, '')) : 0,
-      cash: cash ? parseInt(cash[1].replace(/,/g, '')) : 0,
-      investments: investments ? parseInt(investments[1].replace(/,/g, '')) : 0,
-      gold: goldMatch ? { 
-        grams: parseInt(goldMatch[1]), 
-        value: parseInt(goldMatch[2].replace(/,/g, '')) 
-      } : { grams: 0, value: 0 },
-      receivables: receivables ? parseInt(receivables[1].replace(/,/g, '')) : 0,
-      netWorth: netWorth ? parseInt(netWorth[1].replace(/,/g, '')) : 0
-    }
-  } catch (error) {
-    console.error('Error parsing assets:', error)
-    return {
-      checking: 0,
-      savings: 0,
-      cash: 0,
-      investments: 0,
-      gold: { grams: 0, value: 0 },
-      receivables: 0,
-      netWorth: 0
-    }
+function getFinanceFromDB(db) {
+  const accounts = db.prepare('SELECT * FROM accounts ORDER BY id').all()
+  const transactions = db.prepare(`
+    SELECT tr.*, p.name as project_name, a.name as account_name
+    FROM transactions tr
+    LEFT JOIN projects p ON tr.project_id = p.id
+    LEFT JOIN accounts a ON tr.account_id = a.id
+    ORDER BY tr.date DESC
+  `).all()
+  const netWorthHistory = db.prepare('SELECT * FROM net_worth_snapshots ORDER BY date ASC').all()
+  const budgets = db.prepare('SELECT * FROM budgets WHERE active = 1').all()
+
+  // Calculate summary from accounts
+  const byName = {}
+  for (const a of accounts) byName[a.name] = a.balance
+  const liquid = (byName['Checking'] || 0) + (byName['Savings'] || 0) + (byName['Cash'] || 0)
+  const invested = (byName['Investments'] || 0) + (byName['Gold'] || 0)
+
+  // Receivables from pending income transactions
+  const receivables = transactions
+    .filter(t => t.type === 'income' && t.status === 'pending')
+    .reduce((s, t) => s + t.amount, 0)
+
+  const netWorth = liquid + invested + receivables
+
+  // Monthly income/expenses (current month)
+  const now = new Date()
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const monthlyIncome = transactions
+    .filter(t => t.type === 'income' && t.status === 'completed' && t.date >= monthStart)
+    .reduce((s, t) => s + t.amount, 0)
+  const monthlyExpenses = transactions
+    .filter(t => t.type === 'expense' && t.status === 'completed' && t.date >= monthStart)
+    .reduce((s, t) => s + t.amount, 0)
+
+  // Freelance projects with payment data
+  const freelanceProjects = db.prepare(`
+    SELECT p.*,
+      COALESCE(SUM(CASE WHEN tr.type = 'income' AND tr.status = 'completed' THEN tr.amount ELSE 0 END), 0) as total_paid,
+      COALESCE(SUM(CASE WHEN tr.type = 'income' AND tr.status = 'pending' THEN tr.amount ELSE 0 END), 0) as total_pending
+    FROM projects p
+    LEFT JOIN transactions tr ON p.id = tr.project_id
+    WHERE p.type = 'freelance'
+    GROUP BY p.id
+    ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END, p.updated_at DESC
+  `).all()
+
+  // Build legacy assets shape for backward compat
+  const assets = {
+    checking: byName['Checking'] || 0,
+    savings: byName['Savings'] || 0,
+    cash: byName['Cash'] || 0,
+    investments: byName['Investments'] || 0,
+    gold: { grams: 20, value: byName['Gold'] || 0 },
+    receivables,
+    netWorth
   }
+
+  return {
+    accounts,
+    transactions: transactions.map(tr => ({
+      ...formatTransaction(tr),
+      account_name: tr.account_name,
+      tags: tr.tags,
+      recurring: tr.recurring,
+    })),
+    netWorthHistory: netWorthHistory.map(s => ({ ...s, breakdown: s.breakdown ? JSON.parse(s.breakdown) : null })),
+    budgets,
+    freelanceProjects: freelanceProjects.map(p => ({
+      ...formatProject(p),
+      total_paid: p.total_paid,
+      total_pending: p.total_pending,
+    })),
+    summary: { netWorth, liquid, invested, receivables, monthlyIncome, monthlyExpenses },
+    assets // legacy compat
+  }
+}
+
+function getTasksByCategory(db, category) {
+  return db.prepare(`
+    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
+    FROM tasks t
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.category = ? AND t.status NOT IN ('done', 'skipped') AND t.parent_id IS NULL
+    ORDER BY 
+      CASE t.status WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 ELSE 2 END,
+      CASE WHEN t.due_date IS NOT NULL AND date(t.due_date) < date('now') THEN 0 ELSE 1 END,
+      CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+      t.due_date ASC
+  `).all(category)
+}
+
+function getSubtasks(db, parentIds) {
+  if (!parentIds.length) return []
+  const placeholders = parentIds.map(() => '?').join(',')
+  return db.prepare(`
+    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
+    FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.parent_id IN (${placeholders}) AND t.status NOT IN ('done', 'skipped')
+    ORDER BY t.sort_order, t.id
+  `).all(...parentIds)
+}
+
+function nestSubtasks(tasks, subtasks, projects) {
+  const subtasksByParent = {}
+  for (const st of subtasks) {
+    if (!subtasksByParent[st.parent_id]) subtasksByParent[st.parent_id] = []
+    subtasksByParent[st.parent_id].push(formatTask(st))
+  }
+  return tasks.map(t => {
+    const formatted = formatTask(t, projects?.find(p => p.id === t.project_id))
+    formatted.subtasks = subtasksByParent[t.id] || []
+    return formatted
+  })
+}
+
+function getTaskCounts(db, category = null) {
+  const where = category ? `WHERE category = '${category}'` : ''
+  return db.prepare(`
+    SELECT status, COUNT(*) as count FROM tasks ${where} GROUP BY status
+  `).all().reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
 }
 
 function getUniData(db) {
@@ -170,28 +260,8 @@ function getUniData(db) {
     ORDER BY updated_at DESC
   `).all()
 
-  // Get tasks for uni projects + tasks without projects that seem uni-related
-  const uniTasks = db.prepare(`
-    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
-    FROM tasks t
-    LEFT JOIN projects p ON t.project_id = p.id
-    WHERE (p.type = 'uni' OR (t.project_id IS NULL AND (
-      t.title LIKE '%COMM%' OR t.title LIKE '%CODE%' OR t.title LIKE '%FADA%' OR
-      t.title LIKE '%assignment%' OR t.title LIKE '%quiz%' OR t.title LIKE '%lecture%' OR
-      t.title LIKE '%tutorial%' OR t.title LIKE '%moodle%'
-    )))
-    AND t.status != 'done'
-    ORDER BY 
-      CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
-      CASE WHEN t.due_date IS NOT NULL AND date(t.due_date) < date('now') THEN 0 ELSE 1 END,
-      CASE t.priority 
-        WHEN 'critical' THEN 0 
-        WHEN 'high' THEN 1 
-        WHEN 'medium' THEN 2 
-        WHEN 'low' THEN 3 
-      END,
-      t.due_date ASC
-  `).all()
+  const uniTasks = getTasksByCategory(db, 'uni')
+  const subtasks = getSubtasks(db, uniTasks.map(t => t.id))
 
   // Get deadlines for uni projects
   const uniDeadlines = db.prepare(`
@@ -202,48 +272,31 @@ function getUniData(db) {
     ORDER BY d.due_date ASC
   `).all()
 
-  // Add tasks to projects
+  const formattedTasks = nestSubtasks(uniTasks, subtasks, uniProjects)
+
   const formattedProjects = uniProjects.map(project => {
-    const projectTasks = uniTasks.filter(task => task.project_id === project.id)
-    return {
-      ...formatProject(project),
-      tasks: projectTasks.map(task => formatTask(task, project))
-    }
+    const projectTasks = formattedTasks.filter(task => task.project_id === project.id)
+    return { ...formatProject(project), tasks: projectTasks }
   })
 
   return {
     mode: 'uni',
-    tasks: uniTasks.map(task => formatTask(task, uniProjects.find(p => p.id === task.project_id))),
+    tasks: formattedTasks,
     deadlines: uniDeadlines.map(deadline => formatDeadline(deadline, uniProjects.find(p => p.id === deadline.project_id))),
-    projects: formattedProjects
+    projects: formattedProjects,
+    taskCounts: getTaskCounts(db, 'uni')
   }
 }
 
 function getWorkData(db) {
-  // Get freelance projects
   const workProjects = db.prepare(`
     SELECT * FROM projects 
-    WHERE type = 'freelance' 
+    WHERE type IN ('freelance', 'product') 
     ORDER BY updated_at DESC
   `).all()
 
-  // Get tasks for freelance projects
-  const workTasks = db.prepare(`
-    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
-    FROM tasks t
-    JOIN projects p ON t.project_id = p.id
-    WHERE p.type = 'freelance' AND t.status != 'done'
-    ORDER BY 
-      CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
-      CASE WHEN t.due_date IS NOT NULL AND date(t.due_date) < date('now') THEN 0 ELSE 1 END,
-      CASE t.priority 
-        WHEN 'critical' THEN 0 
-        WHEN 'high' THEN 1 
-        WHEN 'medium' THEN 2 
-        WHEN 'low' THEN 3 
-      END,
-      t.due_date ASC
-  `).all()
+  const workTasks = getTasksByCategory(db, 'work')
+  const subtasks = getSubtasks(db, workTasks.map(t => t.id))
 
   // Get income transactions for freelance projects
   const income = db.prepare(`
@@ -254,66 +307,46 @@ function getWorkData(db) {
     ORDER BY tr.date DESC
   `).all()
 
-  // Find pinned project (most active freelance project)
+  const formattedTasks = nestSubtasks(workTasks, subtasks, workProjects)
+
   const pinnedProject = workProjects.find(project => {
-    const projectTaskCount = workTasks.filter(task => task.project_id === project.id).length
+    const projectTaskCount = formattedTasks.filter(task => task.project_id === project.id).length
     return project.status === 'active' && projectTaskCount > 0
   }) || workProjects[0]
 
-  // Format projects as client cards
   const clients = workProjects.map(project => ({
     ...formatProject(project),
-    tasks: workTasks.filter(task => task.project_id === project.id).map(task => formatTask(task, project))
+    tasks: formattedTasks.filter(task => task.project_id === project.id)
   }))
 
   return {
     mode: 'work',
-    tasks: workTasks.map(task => formatTask(task, workProjects.find(p => p.id === task.project_id))),
+    tasks: formattedTasks,
     projects: clients,
     pinnedProject: pinnedProject ? {
       ...formatProject(pinnedProject),
-      tasks: workTasks.filter(task => task.project_id === pinnedProject.id).map(task => formatTask(task, pinnedProject))
+      tasks: formattedTasks.filter(task => task.project_id === pinnedProject.id)
     } : null,
     clients,
-    income: income.map(tr => formatTransaction(tr, workProjects.find(p => p.id === tr.project_id)))
+    income: income.map(tr => formatTransaction(tr, workProjects.find(p => p.id === tr.project_id))),
+    taskCounts: getTaskCounts(db, 'work')
   }
 }
 
 function getPersonalData(db) {
-  // Get personal projects + tasks without projects
   const personalProjects = db.prepare(`
     SELECT * FROM projects 
     WHERE type = 'personal' 
     ORDER BY updated_at DESC
   `).all()
 
-  // Get tasks for personal projects + unassigned tasks
-  const personalTasks = db.prepare(`
-    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
-    FROM tasks t
-    LEFT JOIN projects p ON t.project_id = p.id
-    WHERE (p.type = 'personal' OR t.project_id IS NULL)
-    AND t.status != 'done'
-    AND NOT (t.title LIKE '%COMM%' OR t.title LIKE '%CODE%' OR t.title LIKE '%FADA%')
-    ORDER BY 
-      CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
-      CASE WHEN t.due_date IS NOT NULL AND date(t.due_date) < date('now') THEN 0 ELSE 1 END,
-      CASE t.priority 
-        WHEN 'critical' THEN 0 
-        WHEN 'high' THEN 1 
-        WHEN 'medium' THEN 2 
-        WHEN 'low' THEN 3 
-      END,
-      t.due_date ASC
-  `).all()
+  const personalTasks = getTasksByCategory(db, 'personal')
+  const subtasks = getSubtasks(db, personalTasks.map(t => t.id))
 
-  // Get today's daily log
+  const formattedTasks = nestSubtasks(personalTasks, subtasks, personalProjects)
+
   const today = new Date().toISOString().split('T')[0]
-  const dailyLog = db.prepare(`
-    SELECT * FROM daily_logs WHERE date = ?
-  `).get(today)
-
-  // Get all habits with today's completion status
+  const dailyLog = db.prepare(`SELECT * FROM daily_logs WHERE date = ?`).get(today)
   const habits = db.prepare(`
     SELECT h.*, hl.completed, hl.notes as today_notes
     FROM habits h
@@ -324,90 +357,35 @@ function getPersonalData(db) {
 
   return {
     mode: 'personal',
-    tasks: personalTasks.map(task => formatTask(task, personalProjects.find(p => p.id === task.project_id))),
+    tasks: formattedTasks,
     dailyLog: formatDailyLog(dailyLog),
-    habits: habits.map(habit => formatHabit(habit, { completed: habit.completed, notes: habit.today_notes }))
+    habits: habits.map(habit => formatHabit(habit, { completed: habit.completed, notes: habit.today_notes })),
+    taskCounts: getTaskCounts(db, 'personal')
   }
 }
 
 function getFinanceData(db) {
-  // Get all income transactions
-  const allIncome = db.prepare(`
-    SELECT tr.*, p.name as project_name
-    FROM transactions tr
-    LEFT JOIN projects p ON tr.project_id = p.id
-    WHERE tr.type = 'income'
-    ORDER BY tr.date DESC
-  `).all()
-
-  // Get all expense transactions
-  const allExpenses = db.prepare(`
-    SELECT tr.*, p.name as project_name
-    FROM transactions tr
-    LEFT JOIN projects p ON tr.project_id = p.id
-    WHERE tr.type = 'expense'
-    ORDER BY tr.date DESC
-  `).all()
-
-  // Get all projects with financial data
-  const projectsWithFinances = db.prepare(`
-    SELECT p.*, 
-           COALESCE(SUM(CASE WHEN tr.type = 'income' THEN tr.amount ELSE 0 END), 0) as total_income,
-           COALESCE(SUM(CASE WHEN tr.type = 'expense' THEN tr.amount ELSE 0 END), 0) as total_expenses
-    FROM projects p
-    LEFT JOIN transactions tr ON p.id = tr.project_id
-    GROUP BY p.id
-    ORDER BY total_income DESC
-  `).all()
-
-  // Calculate totals
-  const totalIncome = allIncome.reduce((sum, tr) => sum + tr.amount, 0)
-  const totalExpenses = allExpenses.reduce((sum, tr) => sum + tr.amount, 0)
-  const totalPending = [...allIncome, ...allExpenses].filter(tr => tr.status === 'pending').reduce((sum, tr) => sum + tr.amount, 0)
-  const net = totalIncome - totalExpenses
-
-  // Parse assets from markdown file
-  const assets = parseAssets()
-
+  const financeDB = getFinanceFromDB(db)
   return {
     mode: 'finance',
-    income: allIncome.map(tr => formatTransaction(tr, projectsWithFinances.find(p => p.id === tr.project_id))),
-    expenses: allExpenses.map(tr => formatTransaction(tr, projectsWithFinances.find(p => p.id === tr.project_id))),
-    projects: projectsWithFinances.map(project => ({
-      ...formatProject(project),
-      total_income: project.total_income,
-      total_expenses: project.total_expenses,
-      net: project.total_income - project.total_expenses
-    })),
-    totals: {
-      totalIncome,
-      totalExpenses,
-      totalPending,
-      net
-    },
-    assets
+    ...financeDB
   }
 }
 
 function getAllData(db) {
-  // Get all data for backward compatibility
   const projects = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all()
   const tasks = db.prepare(`
     SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
     FROM tasks t
     LEFT JOIN projects p ON t.project_id = p.id
-    WHERE t.status != 'done'
+    WHERE t.status NOT IN ('done', 'skipped') AND t.parent_id IS NULL
     ORDER BY 
-      CASE t.status WHEN 'in_progress' THEN 0 ELSE 1 END,
+      CASE t.status WHEN 'in_progress' THEN 0 WHEN 'blocked' THEN 1 ELSE 2 END,
       CASE WHEN t.due_date IS NOT NULL AND date(t.due_date) < date('now') THEN 0 ELSE 1 END,
-      CASE t.priority 
-        WHEN 'critical' THEN 0 
-        WHEN 'high' THEN 1 
-        WHEN 'medium' THEN 2 
-        WHEN 'low' THEN 3 
-      END,
+      CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
       t.due_date ASC
   `).all()
+  const subtasks = getSubtasks(db, tasks.map(t => t.id))
 
   const deadlines = db.prepare(`
     SELECT d.*, p.name as project_name, p.color as project_color
@@ -443,19 +421,22 @@ function getAllData(db) {
     ORDER BY h.name
   `).all(today)
 
-  // Find pinned project
+  const formattedTasks = nestSubtasks(tasks, subtasks, projects)
+
   const pinnedProject = projects.find(p => p.type === 'freelance' && p.status === 'active') || projects[0]
+  const pinnedTasks = pinnedProject ? formattedTasks.filter(t => t.project_id === pinnedProject.id) : []
 
   return {
-    tasks: tasks.map(task => formatTask(task, projects.find(p => p.id === task.project_id))),
+    tasks: formattedTasks,
     projects: projects.map(formatProject),
     deadlines: deadlines.map(deadline => formatDeadline(deadline, projects.find(p => p.id === deadline.project_id))),
     income: income.map(tr => formatTransaction(tr, projects.find(p => p.id === tr.project_id))),
     expenses: expenses.map(tr => formatTransaction(tr, projects.find(p => p.id === tr.project_id))),
-    pinnedProject: pinnedProject ? formatProject(pinnedProject) : null,
+    pinnedProject: pinnedProject ? { ...formatProject(pinnedProject), tasks: pinnedTasks } : null,
     dailyLog: formatDailyLog(dailyLog),
     habits: habits.map(habit => formatHabit(habit, { completed: habit.completed, notes: habit.today_notes })),
-    assets: parseAssets(),
+    ...getFinanceFromDB(db),
+    taskCounts: getTaskCounts(db),
     updated: new Date().toISOString()
   }
 }
