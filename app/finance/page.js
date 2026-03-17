@@ -377,7 +377,7 @@ export default function FinancePage() {
     </NotificationProvider>
   )
 
-  const { accounts, holdings: dbHoldings, transactions, netWorthHistory, priceHistory, goals, freelanceProjects, summary } = data
+  const { accounts, holdings: dbHoldings, transactions, netWorthHistory, priceHistory, purchaseLots = [], goals, freelanceProjects, summary } = data
   const holdings = liveHoldings || dbHoldings
 
   const liquid = (accounts.find(a => a.name === 'Checking')?.balance || 0) +
@@ -481,6 +481,7 @@ export default function FinancePage() {
             holdingName={selectedHolding.name}
             currentPrice={selectedHolding.current_price}
             costBasis={selectedHolding.cost_basis / selectedHolding.quantity}
+            purchaseLots={purchaseLots.filter(l => l.holding_id === selectedHolding.id)}
           />
         </div>
       )}
