@@ -93,9 +93,10 @@ function NetWorthChart({ data }) {
 }
 
 // === PRICE CHART ===
-function PriceChart({ history, holdingName, currentPrice, costBasis, purchaseLots = [] }) {
+function PriceChart({ history, holdingName, currentPrice, costBasis, purchaseLots = [], isPortfolio = false, costBasisAtDate }) {
   const [period, setPeriod] = useState('ALL')
-  const [tooltip, setTooltip] = useState(null)
+  const [hover, setHover] = useState(null)
+  const [buyHover, setBuyHover] = useState(null)
   const periods = ['1W', '1M', '3M', '1Y', 'ALL']
 
   const filtered = useMemo(() => {
@@ -125,8 +126,34 @@ function PriceChart({ history, holdingName, currentPrice, costBasis, purchaseLot
   }))
   const avgCostY = costBasis > 0 ? priceToY(costBasis) : null
 
+  // Buy markers: find data index for each purchase lot date
+  const buyMarkers = useMemo(() => {
+    return purchaseLots.filter(l => l.type === 'buy').map(lot => {
+      const idx = data.findIndex(d => d.date >= lot.purchase_date)
+      if (idx < 0) return null
+      return { lot, idx, x: points[idx]?.x, y: points[idx]?.y }
+    }).filter(Boolean)
+  }, [purchaseLots, data, points])
+
+  const handleMouseMove = useCallback((e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const mx = (e.clientX - rect.left) / rect.width * w
+    let closest = 0, minDist = Infinity
+    points.forEach((p, i) => { const d = Math.abs(p.x - mx); if (d < minDist) { minDist = d; closest = i } })
+    if (minDist < 40) {
+      const d = data[closest]
+      const val = d.price
+      const cb = costBasisAtDate ? costBasisAtDate(d.date) : costBasis
+      const gain = cb > 0 ? val - cb : 0
+      const gainPct = cb > 0 ? ((gain / cb) * 100).toFixed(1) : '0.0'
+      setHover({ i: closest, x: points[closest].x, y: points[closest].y, date: d.date, val, gain, gainPct, cb })
+    } else {
+      setHover(null)
+    }
+  }, [points, data, costBasis, costBasisAtDate])
+
   return (
-    <div style={{marginTop:'1rem'}}>
+    <div style={{marginTop:'1rem',position:'relative'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'0.5rem',marginBottom:'0.75rem'}}>
         <div>
           <span style={{fontFamily:'JetBrains Mono',fontSize:'0.85rem',color:'#fff',fontWeight:600,marginRight:'0.75rem'}}>{holdingName}</span>
@@ -156,6 +183,75 @@ function PriceChart({ history, holdingName, currentPrice, costBasis, purchaseLot
         </>}
         <polyline points={points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#fff" strokeWidth="1.5" />
         {points.length <= 30 && points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#fff" />)}
+
+        {/* Buy markers */}
+        {buyMarkers.map((m, i) => (
+          <g key={`buy-${i}`}
+            onMouseEnter={() => setBuyHover(i)}
+            onMouseLeave={() => setBuyHover(null)}>
+            <line x1={m.x} y1={m.y + 8} x2={m.x} y2={h - padB} stroke="#333" strokeWidth="1" strokeDasharray="3 3" />
+            <polygon
+              points={`${m.x},${m.y + 6} ${m.x - 5},${m.y + 14} ${m.x + 5},${m.y + 14}`}
+              fill="#22c55e" stroke="none" style={{cursor:'pointer'}} />
+            {/* Invisible larger hit area */}
+            <rect x={m.x - 10} y={m.y} width={20} height={20} fill="transparent" style={{cursor:'pointer'}} />
+          </g>
+        ))}
+
+        {/* Buy marker tooltip */}
+        {buyHover !== null && buyMarkers[buyHover] && (() => {
+          const m = buyMarkers[buyHover]
+          const lot = m.lot
+          const isGold = lot.holdingType === 'commodity' || (lot.price_per_unit >= 100 && lot.quantity <= 100)
+          const name = lot.holdingName || (isGold ? 'Gold' : 'HNDQ')
+          const label = isGold
+            ? `BUY: ${lot.quantity}g ${name} @ $${lot.price_per_unit}/g`
+            : `BUY: ${lot.quantity} ${name} @ $${lot.price_per_unit.toFixed(2)}`
+          const dateLabel = new Date(lot.purchase_date + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })
+          const text = `${label} · ${dateLabel}`
+          const tw = text.length * 5.5 + 16
+          const tx = Math.min(Math.max(m.x - tw / 2, padL), w - padR - tw)
+          const ty = m.y - 10
+          return (
+            <g>
+              <rect x={tx} y={ty - 16} width={tw} height={20} fill="#111" stroke="#222" strokeWidth="1" />
+              <text x={tx + 8} y={ty - 2} fill="#fff" fontSize="9" fontFamily="JetBrains Mono">{text}</text>
+            </g>
+          )
+        })()}
+
+        {/* Crosshair + hover tooltip */}
+        {hover && <>
+          <line x1={hover.x} y1={padT} x2={hover.x} y2={h - padB} stroke="#333" strokeWidth="1" />
+          <line x1={padL} y1={hover.y} x2={w - padR} y2={hover.y} stroke="#333" strokeWidth="1" />
+          <circle cx={hover.x} cy={hover.y} r="4" fill="#fff" />
+          {(() => {
+            const dateLabel = new Date(hover.date + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })
+            const valLabel = fmtFull(hover.val)
+            const gainLabel = hover.cb > 0 ? `${hover.gain >= 0 ? '+' : ''}${fmtFull(hover.gain)} (${hover.gain >= 0 ? '+' : ''}${hover.gainPct}%)` : ''
+            const lines = [dateLabel, valLabel, ...(gainLabel ? [gainLabel] : [])]
+            const maxLen = Math.max(...lines.map(l => l.length))
+            const tw = maxLen * 5.5 + 16
+            const th = lines.length * 14 + 10
+            const flipX = hover.x + 15 + tw > w - padR
+            const tx = flipX ? hover.x - 15 - tw : hover.x + 15
+            const ty = Math.max(padT, Math.min(hover.y - th / 2, h - padB - th))
+            return (
+              <g>
+                <rect x={tx} y={ty} width={tw} height={th} fill="#111" stroke="#222" strokeWidth="1" />
+                {lines.map((line, li) => (
+                  <text key={li} x={tx + 8} y={ty + 14 + li * 14} fill={li === 0 ? '#999' : li === 1 ? '#fff' : (hover.gain >= 0 ? '#22c55e' : '#ef4444')} fontSize="9" fontFamily="JetBrains Mono">{line}</text>
+                ))}
+              </g>
+            )
+          })()}
+        </>}
+
+        {/* Invisible overlay for mouse events */}
+        <rect x={padL} y={padT} width={w - padL - padR} height={h - padT - padB}
+          fill="transparent" style={{cursor:'crosshair'}}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => setHover(null)} />
       </svg>
     </div>
   )
@@ -523,23 +619,72 @@ export default function FinancePage() {
 
               {/* Portfolio chart */}
               {(() => {
-                // Build portfolio total value per date with carry-forward for missing dates
+                // Build per-holding purchase lot timeline for accurate share counts
+                const holdingLots = {}
+                for (const lot of purchaseLots) {
+                  if (!holdingLots[lot.holding_id]) holdingLots[lot.holding_id] = []
+                  holdingLots[lot.holding_id].push(lot)
+                }
+                // Sort lots by date
+                for (const hid of Object.keys(holdingLots)) {
+                  holdingLots[hid].sort((a, b) => a.purchase_date.localeCompare(b.purchase_date))
+                }
+
+                // Get first purchase date per holding
+                const firstPurchase = {}
+                for (const h of holdings) {
+                  const lots = holdingLots[h.id]
+                  firstPurchase[h.id] = lots && lots.length > 0 ? lots[0].purchase_date : null
+                }
+
+                // Get quantity owned at a given date for a holding
+                const qtyAtDate = (holdingId, date) => {
+                  const lots = holdingLots[holdingId] || []
+                  let qty = 0
+                  for (const lot of lots) {
+                    if (lot.purchase_date <= date) qty += lot.quantity
+                  }
+                  return qty
+                }
+
+                // Cost basis at a given date (total cost of lots purchased by that date)
+                const costAtDate = (date) => {
+                  let cost = 0
+                  for (const lot of purchaseLots) {
+                    if (lot.purchase_date <= date) cost += lot.total_cost
+                  }
+                  return cost
+                }
+
+                // Build portfolio value per date using price_per_unit * qty_owned
                 const allEntries = []
                 for (const h of holdings) {
                   const history = priceHistory[h.id] || []
                   for (const entry of history) {
-                    allEntries.push({ holdingId: h.id, date: entry.date, value: entry.value })
+                    allEntries.push({ holdingId: h.id, date: entry.date, price: entry.price })
                   }
                 }
                 allEntries.sort((a, b) => a.date.localeCompare(b.date))
                 const uniqueDates = [...new Set(allEntries.map(e => e.date))].sort()
-                const lastKnown = {}
+                const lastKnownPrice = {}
                 const portfolioHistory = []
                 for (const date of uniqueDates) {
                   const entries = allEntries.filter(e => e.date === date)
-                  for (const e of entries) lastKnown[e.holdingId] = e.value
-                  const total = Object.values(lastKnown).reduce((s, v) => s + v, 0)
-                  portfolioHistory.push({ date, price: total })
+                  for (const e of entries) lastKnownPrice[e.holdingId] = e.price
+
+                  let total = 0
+                  for (const h of holdings) {
+                    const fp = firstPurchase[h.id]
+                    if (!fp || date < fp) continue
+                    const price = lastKnownPrice[h.id]
+                    if (price == null) continue
+                    const qty = qtyAtDate(h.id, date)
+                    total += price * qty
+                  }
+                  // Only add dates where at least one holding is owned
+                  if (total > 0) {
+                    portfolioHistory.push({ date, price: total })
+                  }
                 }
                 return portfolioHistory.length >= 2 ? (
                   <PriceChart
@@ -547,6 +692,12 @@ export default function FinancePage() {
                     holdingName=""
                     currentPrice={totalVal}
                     costBasis={totalCost}
+                    purchaseLots={purchaseLots.map(l => {
+                      const h = holdings.find(x => x.id === l.holding_id)
+                      return { ...l, holdingName: h?.name || '', holdingType: h?.type || '' }
+                    })}
+                    isPortfolio={true}
+                    costBasisAtDate={costAtDate}
                   />
                 ) : null
               })()}
