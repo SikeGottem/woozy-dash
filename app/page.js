@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import BootSequence from './components/BootSequence'
 import CommandToolbar from './components/CommandToolbar'
 import FocusOverlay from './components/FocusOverlay'
@@ -9,6 +9,9 @@ import FinanceModule from './components/FinanceModule'
 import FreelanceModule from './components/FreelanceModule'
 import ChatPanel from './components/ChatPanel'
 import ErrorBoundary from './components/ui/ErrorBoundary'
+import { NotificationProvider } from './context/NotificationContext'
+import ToastNotifications from './components/notifications/ToastNotifications'
+import AgentDM from './components/notifications/AgentDM'
 
 // === CAPTURE MODAL ===
 function CaptureModal({ isOpen, onClose }) {
@@ -92,6 +95,13 @@ export default function Home() {
   const [timer, setTimer] = useState(null)
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [currentTask, setCurrentTask] = useState('Dashboard design')
+  const [scrollToAgentId, setScrollToAgentId] = useState(null)
+  const agentsSectionRef = useRef(null)
+
+  const handleViewTranscript = useCallback((agentId) => {
+    setScrollToAgentId(agentId)
+    agentsSectionRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
   
   useEffect(() => {
     const fetchData = () => fetch('/api/data').then(r => r.json()).then(setData).catch(() => {})
@@ -140,7 +150,9 @@ export default function Home() {
   if (!booted) return <BootSequence bootLines={bootLines} />
 
   return (
-    <>
+    <NotificationProvider>
+      <ToastNotifications onViewTranscript={handleViewTranscript} />
+      <AgentDM />
       <div className="system-header">
         <div className="system-status">● SYSTEM ONLINE</div>
         <div className="system-title">WOOZY COMMAND</div>
@@ -164,6 +176,7 @@ export default function Home() {
         currentTask={currentTask}
         setCurrentTask={setCurrentTask}
         data={data}
+        onViewTranscript={handleViewTranscript}
       />
 
       <FocusOverlay
@@ -183,11 +196,11 @@ export default function Home() {
         </div>
 
         {/* === SECTION 2: AGENTS === */}
-        <div className="section-agents">
+        <div className="section-agents" ref={agentsSectionRef}>
           <div className="section-title">AGENTS</div>
           <div className="grid">
             <ErrorBoundary name="Agents">
-              <AgentsModule />
+              <AgentsModule scrollToAgentId={scrollToAgentId} onScrollHandled={() => setScrollToAgentId(null)} />
             </ErrorBoundary>
           </div>
         </div>
@@ -220,6 +233,6 @@ export default function Home() {
       <ErrorBoundary name="Chat">
         <ChatPanel />
       </ErrorBoundary>
-    </>
+    </NotificationProvider>
   )
 }

@@ -2230,6 +2230,154 @@ body[data-context-mode="deep"] .section-agents {
   .agent-message { max-width: 150px; }
 }
 
+/* === TOAST NOTIFICATIONS === */
+.toast-container {
+  position: fixed; top: 1rem; right: 1rem; z-index: 150;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  max-width: 360px; width: 100%;
+  pointer-events: none;
+}
+.toast-card {
+  background: #111; border: 1px solid #222; border-radius: 0;
+  padding: 0.75rem 1rem; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  pointer-events: all;
+  transition: border-color 0.15s;
+}
+.toast-card:hover { border-color: #333; }
+.toast-enter { animation: toast-wipe-in 150ms ease-out both; }
+.toast-exit { animation: toast-wipe-out 150ms ease-in both; }
+@keyframes toast-wipe-in { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes toast-wipe-out { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(100% 0 0 0); } }
+.toast-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.toast-agent { display: flex; align-items: center; gap: 0.5rem; }
+.toast-dot { width: 6px; height: 6px; border-radius: 0; flex-shrink: 0; }
+.toast-dot-success { background: #22c55e; }
+.toast-dot-failed { background: #ef4444; }
+.toast-name { font-size: 0.75rem; font-weight: 600; color: #fff; }
+.toast-status { font-size: 0.6rem; color: #666; letter-spacing: 0.05em; }
+.toast-dismiss { background: none; border: none; color: #555; font-size: 0.8rem; cursor: pointer; padding: 0.2rem; }
+.toast-dismiss:hover { color: #fff; }
+.toast-summary { font-size: 0.7rem; color: #999; line-height: 1.4; margin-bottom: 0.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-meta { display: flex; gap: 0.75rem; font-size: 0.6rem; color: #555; }
+.toast-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #222; }
+.toast-action-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 600;
+  color: #999; background: transparent; border: 1px solid #222;
+  padding: 0.25rem 0.5rem; border-radius: 0; cursor: pointer;
+  letter-spacing: 0.05em; transition: all 0.15s;
+}
+.toast-action-btn:hover { color: #fff; border-color: #444; }
+
+/* === NOTIFICATION CENTER === */
+.notif-center { position: relative; }
+.notif-bell {
+  width: 28px; height: 28px; background: #111;
+  border: 1px solid #222; border-radius: 0;
+  cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  color: #555; position: relative;
+}
+.notif-bell:hover { background: #1a1a1a; border-color: #333; color: #ccc; }
+.notif-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: #ef4444; color: #fff;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 700;
+  min-width: 14px; height: 14px; border-radius: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 2px; line-height: 1;
+}
+.notif-flyout {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  width: 340px; max-height: 450px;
+  background: #111; border: 1px solid #222; border-radius: 0;
+  z-index: 200; overflow: hidden; display: flex; flex-direction: column;
+  animation: toast-wipe-in 150ms ease-out both;
+}
+.notif-flyout-header {
+  padding: 0.75rem 1rem; border-bottom: 1px solid #222;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.notif-flyout-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 600;
+  color: #888; letter-spacing: 0.1em;
+}
+.notif-flyout-actions { display: flex; gap: 0.5rem; }
+.notif-flyout-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; font-weight: 600;
+  color: #666; background: transparent; border: 1px solid #222;
+  padding: 0.2rem 0.4rem; border-radius: 0; cursor: pointer; letter-spacing: 0.05em;
+}
+.notif-flyout-btn:hover { color: #fff; border-color: #444; }
+.notif-flyout-list { flex: 1; overflow-y: auto; }
+.notif-empty {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+  color: #555; text-align: center; padding: 2rem;
+}
+.notif-entry {
+  padding: 0.6rem 1rem; border-bottom: 1px solid #1a1a1a;
+  cursor: pointer; transition: background 0.15s;
+}
+.notif-entry:hover { background: #0f0f0f; }
+.notif-entry:last-child { border-bottom: none; }
+.notif-unread { border-left: 2px solid #fff; }
+.notif-read { border-left: 2px solid transparent; opacity: 0.7; }
+.notif-entry-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.2rem; }
+.notif-entry-dot { width: 5px; height: 5px; border-radius: 0; flex-shrink: 0; }
+.notif-dot-ok { background: #22c55e; }
+.notif-dot-fail { background: #ef4444; }
+.notif-entry-name { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600; color: #e0e0e0; flex: 1; }
+.notif-entry-time { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; color: #555; }
+.notif-entry-summary { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 0.2rem; }
+.notif-entry-meta { display: flex; gap: 0.5rem; font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; color: #555; }
+.notif-entry-actions { display: flex; gap: 0.35rem; margin-top: 0.3rem; }
+.notif-entry-btn {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.5rem; font-weight: 600;
+  color: #888; background: transparent; border: 1px solid #222;
+  padding: 0.15rem 0.35rem; border-radius: 0; cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.notif-entry-btn:hover { color: #fff; border-color: #444; }
+
+/* === AGENT DM PANEL === */
+.dm-panel {
+  position: fixed; bottom: 1.5rem; left: 1.5rem; z-index: 100;
+  width: 360px; max-width: calc(100vw - 2rem); height: 400px; max-height: calc(100vh - 3rem);
+  background: #0a0a0a; border: 1px solid #222; border-radius: 0;
+  display: flex; flex-direction: column;
+  animation: chat-wipe-up 150ms ease-out;
+}
+.dm-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.6rem 1rem; border-bottom: 1px solid #1a1a1a;
+}
+.dm-header-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600;
+  color: #fff; letter-spacing: 0.1em;
+}
+.dm-close { background: none; border: none; color: #666; font-size: 0.9rem; cursor: pointer; padding: 0.2rem; }
+.dm-close:hover { color: #fff; }
+.dm-messages { flex: 1; overflow-y: auto; padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.dm-loading { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #555; text-align: center; padding: 1rem; }
+.dm-msg { display: flex; gap: 0.4rem; align-items: flex-start; }
+.dm-msg-label { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #666; flex-shrink: 0; }
+.dm-msg-user .dm-msg-label { color: #fff; }
+.dm-msg-text { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; line-height: 1.4; color: #ccc; word-break: break-word; }
+.dm-msg-user .dm-msg-text { color: #fff; }
+.dm-typing { color: #666; font-size: 0.75rem; }
+.dm-input-row { display: flex; align-items: center; padding: 0.6rem 0.75rem; border-top: 1px solid #1a1a1a; gap: 0.4rem; }
+.dm-prompt { font-family: 'JetBrains Mono', monospace; color: #fff; font-size: 0.8rem; }
+.dm-input {
+  flex: 1; background: transparent; border: none; color: #fff;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; outline: none; caret-color: #fff;
+}
+.dm-input::placeholder { color: #333; }
+
+@media (max-width: 768px) {
+  .toast-container { max-width: calc(100vw - 2rem); right: 0.5rem; top: 0.5rem; }
+  .notif-flyout { width: calc(100vw - 2rem); right: -0.5rem; }
+  .dm-panel { left: 0.5rem; bottom: 0.5rem; width: calc(100vw - 1rem); }
+}
+
 /* Agent recent tags */
 .agent-recent-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; }
 .agent-recent-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #888; cursor: pointer; padding: 0.25rem 0.5rem; border: 1px solid #222; transition: all 0.2s; }

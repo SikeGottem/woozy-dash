@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNotifications } from '../context/NotificationContext'
 
 const TASK_TEMPLATES = [
   { id: 'research', name: 'RESEARCH', description: 'Spawn a research sub-agent' },
@@ -280,7 +281,7 @@ function ActivityTimeline({ timeline }) {
 }
 
 // === MAIN MODULE ===
-export default function AgentsModule() {
+export default function AgentsModule({ scrollToAgentId, onScrollHandled }) {
   const [agents, setAgents] = useState([])
   const [stats, setStats] = useState({})
   const [timeline, setTimeline] = useState([])
@@ -288,17 +289,28 @@ export default function AgentsModule() {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [showAll, setShowAll] = useState(false)
   const [spawnModal, setSpawnModal] = useState({ open: false, template: null })
+  const { checkAgentTransitions } = useNotifications()
+
+  // Handle scroll-to-agent from notifications
+  useEffect(() => {
+    if (scrollToAgentId) {
+      setSelectedAgent(scrollToAgentId)
+      if (onScrollHandled) onScrollHandled()
+    }
+  }, [scrollToAgentId, onScrollHandled])
 
   const fetchAgents = useCallback(async () => {
     try {
       const res = await fetch('/api/agents')
       const data = await res.json()
-      setAgents(data.agents || [])
+      const agentList = data.agents || []
+      setAgents(agentList)
       setStats(data.stats || {})
       setTimeline(data.timeline || [])
+      checkAgentTransitions(agentList)
     } catch (err) { console.error('Fetch agents error:', err) }
     finally { setLoading(false) }
-  }, [])
+  }, [checkAgentTransitions])
 
   useEffect(() => {
     fetchAgents()

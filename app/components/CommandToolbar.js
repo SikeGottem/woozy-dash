@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import NotificationCenter from './notifications/NotificationCenter'
 
 export default function CommandToolbar({ 
   onCapture, 
@@ -17,7 +18,8 @@ export default function CommandToolbar({
   setTimerSeconds,
   currentTask,
   setCurrentTask,
-  data
+  data,
+  onViewTranscript
 }) {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [stateLoaded, setStateLoaded] = useState(false)
@@ -430,6 +432,8 @@ export default function CommandToolbar({
           </div>
           {focusMode && <div className="hud-mode-tag">FOCUS</div>}
         </div>
+
+        <NotificationCenter onViewTranscript={onViewTranscript || (() => {})} />
 
         <button 
           className="hud-system"

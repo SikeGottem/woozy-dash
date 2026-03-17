@@ -131,6 +131,24 @@ function ChatMessage({ message, isUser }) {
   )
 }
 
+// === CHAT FILTERING ===
+const AGENT_ANNOUNCEMENT_PATTERNS = [
+  /sub-?agent.*(?:just completed|finished|done)/i,
+  /subagent task/i,
+  /Stats:\s*runtime/i,
+  /sessionKey\s+agent:main:subagent:/i,
+  /\bsub-?agent\b.*\bcomplete[d]?\b/i,
+  /spawned.*agent.*completed/i,
+  /agent:main:subagent:[a-f0-9-]+/,
+  /completed.*(?:runtime|tokens|cost)/i,
+]
+
+function isAgentAnnouncement(msg) {
+  if (msg.role !== 'assistant') return false
+  const content = msg.content || ''
+  return AGENT_ANNOUNCEMENT_PATTERNS.some(p => p.test(content))
+}
+
 // === CHAT PANEL ===
 export default function ChatPanel() {
   const [open, setOpen] = useState(false)
@@ -249,7 +267,7 @@ export default function ChatPanel() {
       </div>
       <div className="chat-messages">
         {messages.length === 0 && <div className="chat-empty">Connected to main session<br/>Same memory as Telegram</div>}
-        {messages.map((m, i) => (
+        {messages.filter(m => !isAgentAnnouncement(m)).map((m, i) => (
           <div key={i} className={`chat-msg ${m.role === 'user' ? 'chat-msg-user' : 'chat-msg-bot'}`}>
             <div className="chat-msg-label">{m.role === 'user' ? '>' : ''}</div>
             <ChatMessage message={m} isUser={m.role === 'user'} />
