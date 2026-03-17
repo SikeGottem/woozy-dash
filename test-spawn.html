@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spawn Button Test</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #e5e5e5;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 2rem;
+        }
+        
+        .task-row {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: rgba(14, 14, 14, 0.92);
+            border: 1px solid #333;
+            border-radius: 4px;
+            position: relative;
+            cursor: pointer;
+        }
+        
+        .task-row:hover .spawn-btn {
+            opacity: 1;
+        }
+        
+        .task-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 1px solid #666;
+            border-radius: 2px;
+            margin-right: 1rem;
+        }
+        
+        .task-text {
+            flex: 1;
+        }
+        
+        .spawn-btn {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.7rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s ease;
+            font-family: 'JetBrains Mono', monospace;
+            z-index: 10;
+        }
+        
+        .spawn-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-50%) scale(1.1);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .modal {
+            background: #0a0a0a;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 1.5rem;
+            min-width: 500px;
+            max-width: 600px;
+        }
+        
+        .modal-header {
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            font-size: 0.7rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        
+        .task-display {
+            color: #fff;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+        
+        .context-input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 0.75rem 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            outline: none;
+        }
+        
+        .context-input:focus {
+            border-bottom-color: #fff;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            margin-top: 1.5rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 80px;
+            text-transform: uppercase;
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .btn-primary {
+            background: #fff;
+            border: 1px solid #fff;
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Task Spawn Button Test</h1>
+    
+    <div class="task-row">
+        <div class="task-checkbox"></div>
+        <div class="task-text">Research target parent persona for landing pages</div>
+        <div class="spawn-btn" onclick="showModal('Research target parent persona for landing pages')">→</div>
+    </div>
+    
+    <div class="task-row">
+        <div class="task-checkbox"></div>
+        <div class="task-text">Complete competitive audit of similar schools</div>
+        <div class="spawn-btn" onclick="showModal('Complete competitive audit of similar schools')">→</div>
+    </div>
+    
+    <div class="task-row">
+        <div class="task-checkbox"></div>
+        <div class="task-text">CODE1110 Week 3 assignment submission</div>
+        <div class="spawn-btn" onclick="showModal('CODE1110 Week 3 assignment submission')">→</div>
+    </div>
+    
+    <!-- Modal -->
+    <div id="modal" class="modal-overlay" onclick="hideModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">SPAWN AGENT</div>
+            <div id="task-display" class="task-display"></div>
+            <input id="context-input" class="context-input" placeholder="What should the agent focus on?" />
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="hideModal()">CANCEL</button>
+                <button class="btn btn-primary" onclick="spawnAgent()">SPAWN</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showModal(taskText) {
+            document.getElementById('task-display').textContent = taskText;
+            document.getElementById('context-input').value = '';
+            document.getElementById('modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('context-input').focus(), 50);
+        }
+        
+        function hideModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+        
+        function spawnAgent() {
+            const task = document.getElementById('task-display').textContent;
+            const context = document.getElementById('context-input').value;
+            
+            // Determine save path
+            let savePath;
+            if (task.toLowerCase().includes('headland')) {
+                savePath = '~/Desktop/WOOZY/PROJECTS/Headland Montessori/';
+            } else if (task.match(/COMM\d+|CODE\d+|FADA\d+/i)) {
+                savePath = '~/Desktop/WOOZY/UNI/';
+            } else {
+                savePath = '~/Desktop/WOOZY/INBOX.md';
+            }
+            
+            const filename = task.toLowerCase()
+                .replace(/[^a-zA-Z0-9\s]/g, '')
+                .replace(/\s+/g, '-')
+                .slice(0, 50) + '.md';
+                
+            const fullPath = savePath.endsWith('.md') ? savePath : savePath + filename;
+            
+            const spawnMessage = `Use sessions_spawn to: ${task}${context.trim() ? `. Additional context: ${context.trim()}` : ''}. Save the output to ${fullPath}`;
+            
+            console.log('Would send spawn message:', spawnMessage);
+            alert('Spawn message logged to console!\nCheck the browser console for details.');
+            hideModal();
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('modal');
+            if (modal.style.display === 'flex') {
+                if (e.key === 'Escape') {
+                    hideModal();
+                } else if (e.key === 'Enter' && e.target.id === 'context-input') {
+                    spawnAgent();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
