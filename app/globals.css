@@ -1126,7 +1126,7 @@ body::before {
 .chat-fab { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 56px; height: 56px; border-radius: 0; background: #111; border: 1px solid #222; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: none; transition: all 0.2s; }
 .chat-fab:hover { border-color: #fff; color: #fff; }
 .chat-fab-icon { font-size: 1.4rem; }
-.chat-panel { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 400px; max-width: calc(100vw - 2rem); height: 500px; max-height: calc(100vh - 3rem); background: #0a0a0a; border: 1px solid #222; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; overflow: hidden; animation: chat-wipe-up 300ms ease-out; }
+.chat-panel { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 400px; max-width: calc(100vw - 2rem); height: 500px; max-height: calc(100vh - 3rem); background: #0a0a0a; border: 1px solid #222; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; overflow: hidden; animation: chat-wipe-up 300ms ease-out; isolation: isolate; }
 .chat-panel.closing { animation: chat-wipe-down 300ms ease-in; }
 
 @keyframes chat-wipe-up { 
@@ -1366,6 +1366,40 @@ body::before {
     padding: 0.5rem;
   }
 }
+
+/* === CHAT MEDIA === */
+.chat-image-container { margin: 0.5rem 0; cursor: pointer; max-width: 100%; }
+.chat-image { max-width: 100%; height: auto; border: 1px solid #222; display: block; }
+.chat-image:hover { border-color: #444; }
+
+.chat-lightbox { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.chat-lightbox-img { max-width: 90vw; max-height: 90vh; object-fit: contain; border: 1px solid #222; }
+.chat-lightbox-close { position: absolute; top: 1rem; right: 1rem; background: none; border: 1px solid #333; color: #999; font-size: 1.2rem; cursor: pointer; padding: 0.25rem 0.5rem; }
+.chat-lightbox-close:hover { color: #fff; border-color: #666; }
+
+.chat-audio-container { margin: 0.5rem 0; }
+.chat-audio { width: 100%; height: 32px; filter: invert(1) hue-rotate(180deg); opacity: 0.7; }
+
+.chat-file-card { display: flex; align-items: center; gap: 0.5rem; background: #111; border: 1px solid #222; padding: 0.5rem 0.75rem; margin: 0.25rem 0; text-decoration: none; color: inherit; }
+.chat-file-card:hover { border-color: #444; }
+.chat-file-icon { font-size: 1.2rem; flex-shrink: 0; }
+.chat-file-info { display: flex; flex-direction: column; min-width: 0; }
+.chat-file-name { color: #ccc; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-file-size { color: #555; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; }
+
+.chat-drop-zone { position: absolute; inset: 0; z-index: 10; background: rgba(10,10,10,0.9); border: 2px dashed #333; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.chat-drop-text { color: #555; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+
+.chat-attachment-strip { display: flex; gap: 0.5rem; padding: 0.5rem 1rem 0; overflow-x: auto; border-top: 1px solid #1a1a1a; }
+.chat-attachment-preview { position: relative; display: flex; align-items: center; gap: 0.35rem; background: #111; border: 1px solid #222; padding: 0.25rem 0.5rem; }
+.chat-attachment-thumb { height: 40px; width: auto; max-width: 60px; object-fit: cover; border: 1px solid #222; }
+.chat-attachment-file-thumb { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #0a0a0a; font-size: 1.2rem; }
+.chat-attachment-name { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #888; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-attachment-remove { position: absolute; top: -4px; right: -4px; background: #222; border: 1px solid #333; color: #999; font-size: 0.6rem; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; line-height: 1; }
+.chat-attachment-remove:hover { color: #fff; border-color: #666; }
+
+.chat-attach-btn { background: none; border: none; color: #555; font-size: 1.1rem; cursor: pointer; padding: 0; line-height: 1; flex-shrink: 0; }
+.chat-attach-btn:hover { color: #999; }
 
 /* === AGENTS MODULE === */
 .agents-stats { display: flex; gap: 2rem; margin-bottom: 1.5rem; }

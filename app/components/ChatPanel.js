@@ -18,6 +18,142 @@ function CodeBlock({ content }) {
   )
 }
 
+// === IMAGE LIGHTBOX ===
+function Lightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+  return (
+    <div className="chat-lightbox" onClick={onClose}>
+      <img src={src} alt={alt || ''} className="chat-lightbox-img" onClick={e => e.stopPropagation()} />
+      <button className="chat-lightbox-close" onClick={onClose}>✕</button>
+    </div>
+  )
+}
+
+// === CHAT IMAGE ===
+function ChatImage({ src, alt }) {
+  const [lightbox, setLightbox] = useState(false)
+  return (
+    <>
+      <div className="chat-image-container" onClick={() => setLightbox(true)}>
+        <img src={src} alt={alt || ''} className="chat-image" loading="lazy" />
+      </div>
+      {lightbox && <Lightbox src={src} alt={alt} onClose={() => setLightbox(false)} />}
+    </>
+  )
+}
+
+// === AUDIO PLAYER ===
+function ChatAudio({ src }) {
+  return (
+    <div className="chat-audio-container">
+      <audio controls src={src} className="chat-audio" preload="metadata" />
+    </div>
+  )
+}
+
+// === FILE CARD ===
+function FileCard({ filename, size, url }) {
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="chat-file-card">
+      <span className="chat-file-icon">📄</span>
+      <span className="chat-file-info">
+        <span className="chat-file-name">{filename}</span>
+        {size && <span className="chat-file-size">{formatSize(size)}</span>}
+      </span>
+    </a>
+  )
+}
+
+// === MEDIA DETECTION HELPERS ===
+const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s]*)?$/i
+const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac)(\?[^\s]*)?$/i
+const MEDIA_LINE_RE = /^MEDIA:\s*(.+)$/gm
+const MD_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
+const RAW_URL_RE = /(?:^|\s)(https?:\/\/[^\s]+)/g
+const UPLOAD_PATH_RE = /\/uploads\/[^\s]+/g
+
+function extractMediaElements(text) {
+  const elements = []
+  const processedRanges = []
+
+  // Extract MEDIA: lines
+  let match
+  while ((match = MEDIA_LINE_RE.exec(text)) !== null) {
+    const path = match[1].trim()
+    if (IMAGE_EXT_RE.test(path) || path.startsWith('data:image/')) {
+      elements.push({ type: 'image', src: path, start: match.index, end: match.index + match[0].length })
+    } else if (AUDIO_EXT_RE.test(path)) {
+      elements.push({ type: 'audio', src: path, start: match.index, end: match.index + match[0].length })
+    }
+    processedRanges.push([match.index, match.index + match[0].length])
+  }
+
+  // Extract markdown images
+  MD_IMAGE_RE.lastIndex = 0
+  while ((match = MD_IMAGE_RE.exec(text)) !== null) {
+    if (!isInRange(match.index, processedRanges)) {
+      elements.push({ type: 'image', src: match[2], alt: match[1], start: match.index, end: match.index + match[0].length })
+      processedRanges.push([match.index, match.index + match[0].length])
+    }
+  }
+
+  // Extract raw image/audio URLs
+  RAW_URL_RE.lastIndex = 0
+  while ((match = RAW_URL_RE.exec(text)) !== null) {
+    const url = match[1]
+    if (!isInRange(match.index, processedRanges)) {
+      if (IMAGE_EXT_RE.test(url)) {
+        elements.push({ type: 'image', src: url, start: match.index, end: match.index + match[0].length })
+        processedRanges.push([match.index, match.index + match[0].length])
+      } else if (AUDIO_EXT_RE.test(url)) {
+        elements.push({ type: 'audio', src: url, start: match.index, end: match.index + match[0].length })
+        processedRanges.push([match.index, match.index + match[0].length])
+      }
+    }
+  }
+
+  // Extract /uploads/ paths
+  UPLOAD_PATH_RE.lastIndex = 0
+  while ((match = UPLOAD_PATH_RE.exec(text)) !== null) {
+    if (!isInRange(match.index, processedRanges)) {
+      const path = match[0]
+      if (IMAGE_EXT_RE.test(path)) {
+        elements.push({ type: 'image', src: path, start: match.index, end: match.index + match[0].length })
+      } else if (AUDIO_EXT_RE.test(path)) {
+        elements.push({ type: 'audio', src: path, start: match.index, end: match.index + match[0].length })
+      } else {
+        elements.push({ type: 'file', url: path, filename: path.split('/').pop(), start: match.index, end: match.index + match[0].length })
+      }
+      processedRanges.push([match.index, match.index + match[0].length])
+    }
+  }
+
+  return elements
+}
+
+function isInRange(index, ranges) {
+  return ranges.some(([start, end]) => index >= start && index < end)
+}
+
+function stripMediaFromText(text, elements) {
+  let result = text
+  // Remove media references from text (process in reverse to preserve indices)
+  const sorted = [...elements].sort((a, b) => b.start - a.start)
+  for (const el of sorted) {
+    result = result.slice(0, el.start) + result.slice(el.end)
+  }
+  return result.trim()
+}
+
 // === MARKDOWN RENDERER ===
 function MarkdownRenderer({ content }) {
   const parseMarkdown = (text) => {
@@ -110,6 +246,24 @@ function MarkdownRenderer({ content }) {
   return <div className="chat-markdown">{parseMarkdown(content).map(renderElement)}</div>
 }
 
+// === RICH MESSAGE (with media) ===
+function RichContent({ content }) {
+  const mediaElements = extractMediaElements(content)
+  const cleanText = stripMediaFromText(content, mediaElements)
+
+  return (
+    <>
+      {cleanText && <MarkdownRenderer content={cleanText} />}
+      {mediaElements.map((el, i) => {
+        if (el.type === 'image') return <ChatImage key={`media-${i}`} src={el.src} alt={el.alt} />
+        if (el.type === 'audio') return <ChatAudio key={`media-${i}`} src={el.src} />
+        if (el.type === 'file') return <FileCard key={`media-${i}`} filename={el.filename} url={el.url} />
+        return null
+      })}
+    </>
+  )
+}
+
 function ChatMessage({ message, isUser }) {
   const [expanded, setExpanded] = useState(false)
   const content = message.content || ''
@@ -119,10 +273,18 @@ function ChatMessage({ message, isUser }) {
   const completionWords = ['done', 'completed', 'finished', 'created', 'saved', 'deployed', 'uploaded', 'submitted']
   const isCompletion = !isUser && completionWords.some(word => content.toLowerCase().includes(word) && content.length < 200)
 
+  // Check if message has attachments
+  const attachments = message.attachments || []
+
   if (isUser) {
     return (
       <div className="chat-msg-text">
         {displayContent}
+        {attachments.map((att, i) => (
+          att.isImage
+            ? <ChatImage key={`att-${i}`} src={att.url} alt={att.filename} />
+            : <FileCard key={`att-${i}`} filename={att.filename} size={att.size} url={att.url} />
+        ))}
         {message.channel === 'telegram' && <span className="chat-channel">TG</span>}
       </div>
     )
@@ -133,7 +295,7 @@ function ChatMessage({ message, isUser }) {
       <div className="chat-completion-card">
         <div className="chat-completion-icon">✓</div>
         <div className="chat-completion-text">
-          <MarkdownRenderer content={displayContent} />
+          <RichContent content={displayContent} />
           {shouldTruncate && <button className="chat-expand-btn" onClick={() => setExpanded(!expanded)}>{expanded ? 'show less' : 'show more'}</button>}
         </div>
       </div>
@@ -142,8 +304,27 @@ function ChatMessage({ message, isUser }) {
 
   return (
     <div className="chat-msg-text">
-      <MarkdownRenderer content={displayContent} />
+      <RichContent content={displayContent} />
       {shouldTruncate && <button className="chat-expand-btn" onClick={() => setExpanded(!expanded)}>{expanded ? 'show less' : 'show more'}</button>}
+    </div>
+  )
+}
+
+// === ATTACHMENT PREVIEW ===
+function AttachmentPreview({ attachments, onRemove }) {
+  if (!attachments.length) return null
+  return (
+    <div className="chat-attachment-strip">
+      {attachments.map((att, i) => (
+        <div key={i} className="chat-attachment-preview">
+          {att.isImage
+            ? <img src={att.dataUrl || att.url} alt={att.filename} className="chat-attachment-thumb" />
+            : <div className="chat-attachment-file-thumb">📄</div>
+          }
+          <span className="chat-attachment-name">{att.filename}</span>
+          <button className="chat-attachment-remove" onClick={() => onRemove(i)}>✕</button>
+        </div>
+      ))}
     </div>
   )
 }
@@ -166,12 +347,20 @@ function isAgentAnnouncement(msg) {
   return AGENT_ANNOUNCEMENT_PATTERNS.some(p => p.test(content))
 }
 
+// === UPLOAD HELPER ===
+async function uploadFile(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/upload', { method: 'POST', body: formData })
+  if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Upload failed') }
+  return res.json()
+}
+
 // === CHAT PANEL ===
 export default function ChatPanel({ externalOpen, onExternalToggle }) {
   const [open, setOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
 
-  // Sync with external open state from layout
   useEffect(() => {
     if (externalOpen !== undefined && externalOpen !== open) {
       if (externalOpen) setOpen(true)
@@ -181,8 +370,13 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [attachments, setAttachments] = useState([])
+  const [dragging, setDragging] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const panelRef = useRef(null)
+  const dragCounter = useRef(0)
+  const fileInputRef = useRef(null)
 
   useEffect(() => { if (messages.length > 0) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
   useEffect(() => { if (open) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'instant' }), 50) }, [open])
@@ -215,7 +409,64 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
   }, [open])
-  
+
+  // === PASTE HANDLER ===
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      const items = e.clipboardData?.items
+      if (!items) return
+      for (const item of items) {
+        if (item.kind === 'file') {
+          e.preventDefault()
+          const file = item.getAsFile()
+          if (!file) continue
+          addFileAttachment(file)
+        }
+      }
+    }
+    const panel = panelRef.current
+    if (panel) panel.addEventListener('paste', handler)
+    return () => { if (panel) panel.removeEventListener('paste', handler) }
+  }, [open, attachments])
+
+  // === DRAG AND DROP ===
+  const handleDragEnter = (e) => {
+    e.preventDefault()
+    dragCounter.current++
+    if (e.dataTransfer?.types?.includes('Files')) setDragging(true)
+  }
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current <= 0) { dragCounter.current = 0; setDragging(false) }
+  }
+  const handleDragOver = (e) => { e.preventDefault() }
+  const handleDrop = (e) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setDragging(false)
+    const files = e.dataTransfer?.files
+    if (files) for (const file of files) addFileAttachment(file)
+  }
+
+  const addFileAttachment = (file) => {
+    const isImage = file.type.startsWith('image/')
+    if (isImage) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setAttachments(prev => [...prev, { file, filename: file.name, size: file.size, isImage: true, dataUrl: reader.result }])
+      }
+      reader.readAsDataURL(file)
+    } else {
+      setAttachments(prev => [...prev, { file, filename: file.name, size: file.size, isImage: false }])
+    }
+  }
+
+  const removeAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }
+
   const mergeMessages = useCallback((serverMsgs, localMsgs) => {
     const all = [...serverMsgs, ...localMsgs]
     const seen = new Set()
@@ -259,16 +510,44 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
 
   const pendingRef = useRef(0)
   const send = async () => {
-    if (!input.trim()) return
+    if (!input.trim() && !attachments.length) return
     const text = input.trim()
-    const userMsg = { role: 'user', content: text, ts: Date.now() }
+
+    // Upload attachments first
+    let uploadedAttachments = []
+    for (const att of attachments) {
+      try {
+        const result = await uploadFile(att.file)
+        uploadedAttachments.push(result)
+      } catch (err) {
+        console.error('Upload failed:', err)
+      }
+    }
+
+    // Build message text with attachment references
+    let messageText = text
+    for (const att of uploadedAttachments) {
+      if (att.isImage) {
+        messageText += (messageText ? '\n' : '') + `![${att.filename}](${att.url})`
+      } else {
+        messageText += (messageText ? '\n' : '') + `[${att.filename}](${att.url})`
+      }
+    }
+
+    const userMsg = {
+      role: 'user',
+      content: text || (uploadedAttachments.length ? `[${uploadedAttachments.length} attachment(s)]` : ''),
+      ts: Date.now(),
+      attachments: uploadedAttachments
+    }
     setMessages(prev => [...prev, userMsg])
     setInput('')
+    setAttachments([])
     setTimeout(() => inputRef.current?.focus(), 0)
     pendingRef.current++
     setLoading(true)
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) })
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: messageText }) })
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply || data.error || 'Error', ts: Date.now() }])
     } catch (err) { setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}`, ts: Date.now() }]) }
@@ -281,7 +560,14 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
   if (!open) return <button className="chat-fab" onClick={handleToggle}><span className="chat-fab-icon">⌘</span></button>
 
   return (
-    <div className={`chat-panel ${isClosing ? 'closing' : ''}`}>
+    <div
+      className={`chat-panel ${isClosing ? 'closing' : ''}`}
+      ref={panelRef}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div className="chat-header">
         <span className="chat-header-title">WOOZY TERMINAL</span>
         <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
@@ -300,7 +586,24 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
         {loading && <div className="chat-msg chat-msg-bot"><div className="chat-msg-label"></div><div className="chat-msg-text chat-typing">thinking<span className="blink">_</span></div></div>}
         <div ref={messagesEndRef} />
       </div>
-      <div className="chat-input-row"><span className="chat-prompt">&gt;</span><input ref={inputRef} className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="message woozy..." /></div>
+      {dragging && (
+        <div className="chat-drop-zone">
+          <span className="chat-drop-text">Drop file</span>
+        </div>
+      )}
+      <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
+      <div className="chat-input-row">
+        <button className="chat-attach-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">⊕</button>
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          multiple
+          onChange={(e) => { for (const f of e.target.files) addFileAttachment(f); e.target.value = '' }}
+        />
+        <span className="chat-prompt">&gt;</span>
+        <input ref={inputRef} className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="message woozy..." />
+      </div>
     </div>
   )
 }
