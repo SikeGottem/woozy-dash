@@ -1,6 +1,23 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 
+// === CODE BLOCK WITH COPY ===
+function CodeBlock({ content }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="chat-code-block-wrapper">
+      <button className="chat-code-copy" onClick={handleCopy}>{copied ? 'copied' : 'copy'}</button>
+      <pre className="chat-code-block"><code>{content}</code></pre>
+    </div>
+  )
+}
+
 // === MARKDOWN RENDERER ===
 function MarkdownRenderer({ content }) {
   const parseMarkdown = (text) => {
@@ -82,7 +99,7 @@ function MarkdownRenderer({ content }) {
   const renderElement = (element) => {
     switch (element.type) {
       case 'heading': { const Tag = `h${element.level}`; return <Tag key={element.key} className={`chat-heading chat-heading-${element.level}`}>{element.content}</Tag> }
-      case 'code-block': return <pre key={element.key} className="chat-code-block"><code>{element.content}</code></pre>
+      case 'code-block': return <CodeBlock key={element.key} content={element.content} />
       case 'list': return <ul key={element.key} className="chat-list">{element.items.map((item, i) => <li key={`item-${i}`} className="chat-list-item">{renderInlineElements(item)}</li>)}</ul>
       case 'paragraph': return <div key={element.key} className="chat-paragraph">{renderInlineElements(element.content)}</div>
       case 'spacing': return <div key={element.key} className="chat-spacing" />
