@@ -133,29 +133,95 @@ function IncomeExpenseBars({ transactions }) {
   )
 }
 
+// === LIVE HOLDINGS CARD ===
+function HoldingsCard({ holdings, priceData }) {
+  if (!holdings || holdings.length === 0) return null
+  const lastUpdated = priceData?.lastUpdated
+  const timeStr = lastUpdated ? new Date(lastUpdated).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', timeZone: 'Australia/Sydney' }) : null
+
+  return (
+    <div className="card full">
+      <div className="section-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span>Live Holdings</span>
+        {timeStr && <span style={{fontSize:'0.65rem',color:'#555',fontWeight:'normal'}}>prices as of {timeStr}</span>}
+      </div>
+      <div className="fin-holdings-grid">
+        {holdings.map((h, i) => {
+          const isUp = h.gain >= 0
+          return (
+            <div key={i} className="fin-holding-item">
+              <div className="fin-holding-top">
+                <span className="fin-holding-name">{h.name === 'Gold' ? `Gold ${h.quantity}g` : h.name}</span>
+                <span className="fin-holding-value">{fmt(h.current_value)}</span>
+              </div>
+              <div className="fin-holding-bottom">
+                <span style={{fontSize:'0.7rem',color:'#555'}}>
+                  {h.name === 'Gold' ? `${fmt(h.current_price)}/g` : `${fmt(h.current_price)}/unit × ${Math.round(h.quantity)}`}
+                </span>
+                <span style={{fontSize:'0.7rem',color: isUp ? '#22c55e' : '#ef4444'}}>
+                  {isUp ? '▲' : '▼'} {fmt(Math.abs(h.gain))} ({isUp ? '+' : ''}{h.gainPct}%)
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function FinanceModule({ data, unlocked, onUnlock }) {
   const accounts = data.accounts || []
   const transactions = data.transactions || []
   const netWorthHistory = data.netWorthHistory || []
   const summary = data.summary || {}
   const freelanceProjects = data.freelanceProjects || []
+  const holdings = data.holdings || []
+  const [priceData, setPriceData] = useState(null)
 
-  // Asset allocation segments from accounts
+  // Fetch live prices on mount
+  useEffect(() => {
+    if (!unlocked) return
+    fetch('/api/prices')
+      .then(r => r.json())
+      .then(d => setPriceData(d))
+      .catch(() => {})
+  }, [unlocked])
+
+  // Use live holdings data if available
+  const liveHoldings = priceData?.holdings || holdings
+
+  // Asset allocation segments - use live values for investments/gold
+  const hndqVal = liveHoldings.find(h => h.name === 'HNDQ')?.current_value || 0
+  const goldVal = liveHoldings.find(h => h.name === 'Gold')?.current_value || 0
+  
   const acctColors = {
     'Checking': 'rgba(255,255,255,0.9)',
     'Savings': 'rgba(255,255,255,0.6)',
     'Cash': 'rgba(255,255,255,0.35)',
-    'Investments': 'rgba(0,255,65,0.7)',
+    'HNDQ': 'rgba(0,255,65,0.7)',
     'Gold': 'rgba(0,255,65,0.45)',
   }
-  const assetSegments = accounts.map(a => ({
-    label: a.name, value: a.balance, color: acctColors[a.name] || '#666'
-  })).filter(s => s.value > 0)
+  
+  // Build segments: cash accounts + live holdings
+  const cashAccounts = accounts.filter(a => !['Investments', 'Gold'].includes(a.name))
+  const assetSegments = [
+    ...cashAccounts.map(a => ({ label: a.name, value: a.balance, color: acctColors[a.name] || '#666' })),
+    ...(hndqVal > 0 ? [{ label: 'HNDQ', value: hndqVal, color: acctColors['HNDQ'] }] : []),
+    ...(goldVal > 0 ? [{ label: 'Gold', value: goldVal, color: acctColors['Gold'] }] : []),
+  ].filter(s => s.value > 0)
   const totalAssets = assetSegments.reduce((s, a) => s + a.value, 0)
 
   // Trend arrow
+  // Recalculate net worth with live prices
+  const liveSummary = { ...summary }
+  if (priceData?.totalInvestmentValue) {
+    liveSummary.invested = priceData.totalInvestmentValue
+    liveSummary.netWorth = liveSummary.liquid + liveSummary.invested + liveSummary.receivables
+  }
+
   const lastSnapshot = netWorthHistory.length >= 2 ? netWorthHistory[netWorthHistory.length - 2] : null
-  const nwTrend = lastSnapshot ? summary.netWorth - lastSnapshot.total : 0
+  const nwTrend = lastSnapshot ? (liveSummary.netWorth || summary.netWorth) - lastSnapshot.total : 0
 
   return (
     <div className="section-finances">
@@ -166,14 +232,19 @@ export default function FinanceModule({ data, unlocked, onUnlock }) {
         <DecryptReveal unlocked={unlocked}>
           <div className="card full">
             <div className="fin-stats-row">
-              <MiniStat label="Net Worth" value={fmt(summary.netWorth || 0)} sub={nwTrend !== 0 ? `${nwTrend > 0 ? '▲' : '▼'} ${fmt(Math.abs(nwTrend))}` : null} />
-              <MiniStat label="Liquid Cash" value={fmt(summary.liquid || 0)} />
-              <MiniStat label="Investments" value={fmt(summary.invested || 0)} />
-              <MiniStat label="Receivables" value={fmt(summary.receivables || 0)} color="#d97706" />
-              <MiniStat label="Month Income" value={fmt(summary.monthlyIncome || 0)} color="#22c55e" />
-              <MiniStat label="Month Spend" value={fmt(summary.monthlyExpenses || 0)} color={summary.monthlyExpenses > 0 ? '#ef4444' : '#999'} />
+              <MiniStat label="Net Worth" value={fmt(liveSummary.netWorth || 0)} sub={nwTrend !== 0 ? `${nwTrend > 0 ? '▲' : '▼'} ${fmt(Math.abs(nwTrend))}` : null} />
+              <MiniStat label="Liquid Cash" value={fmt(liveSummary.liquid || 0)} />
+              <MiniStat label="Investments" value={fmt(liveSummary.invested || 0)} />
+              <MiniStat label="Receivables" value={fmt(liveSummary.receivables || 0)} color="#d97706" />
+              <MiniStat label="Month Income" value={fmt(liveSummary.monthlyIncome || 0)} color="#22c55e" />
+              <MiniStat label="Month Spend" value={fmt(liveSummary.monthlyExpenses || 0)} color={liveSummary.monthlyExpenses > 0 ? '#ef4444' : '#999'} />
             </div>
           </div>
+        </DecryptReveal>
+
+        {/* ROW 1.5: Live Holdings */}
+        <DecryptReveal unlocked={unlocked}>
+          <HoldingsCard holdings={liveHoldings} priceData={priceData} />
         </DecryptReveal>
 
         {/* ROW 2: Charts */}

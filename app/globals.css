@@ -918,6 +918,14 @@ body::before {
 .fin-pipeline-bar-fill { height: 100%; background: #22c55e; transition: width 0.8s ease; }
 .fin-pipeline-nums { display: flex; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
 
+/* Live Holdings */
+.fin-holdings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
+.fin-holding-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 0.75rem 1rem; }
+.fin-holding-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
+.fin-holding-name { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #ccc; font-weight: 500; }
+.fin-holding-value { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #fff; font-weight: 600; }
+.fin-holding-bottom { display: flex; justify-content: space-between; align-items: center; }
+
 /* Empty */
 .empty-state { color: var(--dim); font-style: italic; text-align: center; padding: 1rem; font-size: 0.85rem; }
 .empty-visual { text-align: center; padding: 2rem 1rem; color: var(--dim); }
