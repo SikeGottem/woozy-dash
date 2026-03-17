@@ -958,23 +958,19 @@ body::before {
 
 @keyframes chat-wipe-up { 
   from { 
-    opacity: 0; 
-    transform: translateY(100%); 
+    clip-path: inset(100% 0 0 0); 
   } 
   to { 
-    opacity: 1; 
-    transform: translateY(0); 
+    clip-path: inset(0 0 0 0); 
   } 
 }
 
 @keyframes chat-wipe-down { 
   from { 
-    opacity: 1; 
-    transform: translateY(0); 
+    clip-path: inset(0 0 0 0); 
   } 
   to { 
-    opacity: 0; 
-    transform: translateY(100%); 
+    clip-path: inset(100% 0 0 0); 
   } 
 }
 .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #1a1a1a; }
