@@ -919,12 +919,64 @@ body::before {
 .fin-pipeline-nums { display: flex; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
 
 /* Live Holdings */
+/* Legacy holdings grid */
 .fin-holdings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
-.fin-holding-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 0.75rem 1rem; }
+.fin-holding-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 0; padding: 0.75rem 1rem; }
 .fin-holding-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
 .fin-holding-name { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #ccc; font-weight: 500; }
 .fin-holding-value { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #fff; font-weight: 600; }
 .fin-holding-bottom { display: flex; justify-content: space-between; align-items: center; }
+
+/* Net Worth Overview */
+.fin-nw-overview { }
+.fin-nw-top { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.fin-nw-amount { font-family: 'JetBrains Mono', monospace; font-size: 2rem; font-weight: 700; color: #fff; }
+.fin-nw-change { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+
+/* Allocation Bar */
+.fin-alloc-bar { display: flex; height: 8px; width: 100%; margin-bottom: 1rem; overflow: hidden; }
+.fin-alloc-segment { height: 100%; min-width: 2px; }
+.fin-alloc-legend { display: flex; flex-direction: column; gap: 0.35rem; }
+.fin-alloc-item { display: flex; align-items: center; gap: 0.5rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+.fin-alloc-dot { width: 8px; height: 8px; flex-shrink: 0; }
+.fin-alloc-label { color: #999; min-width: 80px; }
+.fin-alloc-val { color: #fff; min-width: 70px; text-align: right; }
+.fin-alloc-pct { color: #555; font-size: 0.65rem; }
+
+/* Account breakdown */
+.fin-accounts-grid { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #1a1a1a; }
+.fin-account-item { font-family: 'JetBrains Mono', monospace; min-width: 120px; }
+.fin-account-name { font-size: 0.7rem; color: #555; text-transform: uppercase; letter-spacing: 0.05em; display: block; }
+.fin-account-bal { font-size: 0.9rem; color: #fff; font-weight: 600; display: block; }
+.fin-account-type { font-size: 0.6rem; color: #333; display: block; }
+
+/* Holdings Cards */
+.fin-holdings-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.75rem; }
+.fin-holding-card { border: 1px solid #222; padding: 0.85rem 1rem; cursor: pointer; transition: border-color 0.15s; }
+.fin-holding-card:hover { border-color: #333; }
+.fin-holding-card.selected { border-color: #444; }
+.fin-holding-card-top { margin-bottom: 0.35rem; }
+.fin-holding-card-name { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #999; }
+.fin-holding-card-mid { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.25rem; }
+.fin-holding-card-value { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: #fff; }
+.fin-holding-card-detail { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #555; margin-bottom: 0.35rem; }
+.fin-holding-card-spark { line-height: 1; }
+
+/* Price Chart */
+.fin-chart-container { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #1a1a1a; }
+.fin-chart-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+.fin-chart-title { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #fff; font-weight: 600; margin-right: 0.75rem; }
+.fin-chart-price { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: #fff; }
+.fin-chart-svg { width: 100%; height: auto; max-height: 200px; }
+.fin-chart-empty { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #555; padding: 2rem 0; text-align: center; }
+
+/* Time Period Buttons */
+.fin-period-btns { display: flex; gap: 0.25rem; }
+.fin-period-btn { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: #555; background: none; border: 1px solid transparent; padding: 0.15rem 0.4rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; }
+.fin-period-btn:hover { color: #999; }
+.fin-period-btn.active { color: #fff; border-color: #333; }
+.fin-period-btn.disabled { color: #333; cursor: default; }
+.fin-period-btn.disabled:hover { color: #333; }
 
 /* Empty */
 .empty-state { color: var(--dim); font-style: italic; text-align: center; padding: 1rem; font-size: 0.85rem; }

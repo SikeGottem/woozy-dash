@@ -23,6 +23,13 @@ function updateHoldings(prices) {
       WHERE id = ?
     `).run(price, value, now, now, h.id)
     
+    // Log to price_history (one entry per day per holding)
+    const today = new Date().toISOString().split('T')[0]
+    db.prepare(`
+      INSERT OR REPLACE INTO price_history (holding_id, price, value, date)
+      VALUES (?, ?, ?, ?)
+    `).run(h.id, price, value, today)
+    
     updated.push({
       ...h,
       current_price: price,
