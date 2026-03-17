@@ -163,12 +163,21 @@ function PinScreen({ onUnlock, fadeIn }) {
         setPin(prev => {
           const next = (prev + e.key).slice(0, 4)
           if (next.length === 4) {
-            if (next === '2238') {
-              setTimeout(() => onUnlock(), 200)
-            } else {
-              setError(true)
-              setTimeout(() => { setError(false); setPin('') }, 1200)
-            }
+            fetch('/api/verify-pin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pin: next })
+              }).then(r => {
+                if (r.ok) {
+                  setTimeout(() => onUnlock(), 200)
+                } else {
+                  setError(true)
+                  setTimeout(() => { setError(false); setPin('') }, 1200)
+                }
+              }).catch(() => {
+                setError(true)
+                setTimeout(() => { setError(false); setPin('') }, 1200)
+              })
           }
           return next
         })

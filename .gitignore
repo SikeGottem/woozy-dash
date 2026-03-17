@@ -1,4 +1,7 @@
 node_modules/
 .next/
 *.db
+.env
 .env.local
+.env*.local
+price-cache.json

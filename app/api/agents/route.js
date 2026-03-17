@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 
-const SESSIONS_DIR = '/Users/ethanwu/.openclaw/agents/main/sessions'
+const SESSIONS_DIR = path.join(process.env.HOME || '/tmp', '.openclaw/agents/main/sessions')
 const SESSIONS_JSON = path.join(SESSIONS_DIR, 'sessions.json')
 const FIVE_MIN = 5 * 60 * 1000
 const TWO_HOURS = 2 * 60 * 60 * 1000

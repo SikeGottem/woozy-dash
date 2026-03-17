@@ -31,7 +31,6 @@ export async function POST(request) {
     
     // Send only the latest message — the gateway session has full history
     const { url: GATEWAY_URL, token: GATEWAY_TOKEN } = getGatewayConfig()
-    console.log('CHAT DEBUG - token present:', !!GATEWAY_TOKEN, 'token length:', GATEWAY_TOKEN?.length, 'token start:', GATEWAY_TOKEN?.slice(0,4))
     const res = await fetch(GATEWAY_URL, {
       method: 'POST',
       headers: {

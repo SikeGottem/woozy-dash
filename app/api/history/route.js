@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 
-const AGENTS_DIR = '/Users/ethanwu/.openclaw/agents/main/sessions'
+const AGENTS_DIR = path.join(process.env.HOME || '/tmp', '.openclaw/agents/main/sessions')
 
 function getRecentTranscripts(maxFiles = 10) {
   try {
