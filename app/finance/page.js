@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { PinLock, DecryptReveal } from '../components/ui/PinLock'
 import CommandToolbar from '../components/CommandToolbar'
 import { NotificationProvider } from '../context/NotificationContext'
@@ -263,8 +263,8 @@ function IncomeExpenseBars({ transactions }) {
     const m = tr.date?.slice(0, 7)
     const month = months.find(mo => mo.key === m)
     if (month) {
-      if (tr.type === 'income' && tr.status === 'completed') month.income += tr.amount
-      if (tr.type === 'expense' && tr.status === 'completed') month.expense += tr.amount
+      if (tr.type === 'income' && ['completed','cleared','paid'].includes(tr.status)) month.income += tr.amount
+      if (tr.type === 'expense' && ['completed','cleared','paid'].includes(tr.status)) month.expense += tr.amount
     }
   }
   const maxVal = Math.max(...months.map(m => Math.max(m.income, m.expense)), 1)
@@ -291,7 +291,7 @@ function IncomeExpenseBars({ transactions }) {
 function IncomeByClient({ transactions }) {
   const clientTotals = {}
   for (const tr of transactions) {
-    if (tr.type === 'income' && tr.status === 'completed' && tr.project_name) {
+    if (tr.type === 'income' && ['completed','cleared','paid'].includes(tr.status) && tr.project_name) {
       clientTotals[tr.project_name] = (clientTotals[tr.project_name] || 0) + tr.amount
     }
   }
@@ -334,6 +334,40 @@ function StripeStatus() {
   )
 }
 
+// === LIVE INDICATOR ===
+function LiveIndicator({ lastUpdated }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 10000)
+    return () => clearInterval(t)
+  }, [])
+  const ago = lastUpdated ? Math.floor((now - lastUpdated) / 1000) : null
+  const label = ago === null ? '...' : ago < 60 ? `${ago}s ago` : ago < 3600 ? `${Math.floor(ago/60)}m ago` : `${Math.floor(ago/3600)}h ago`
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:'0.4rem',fontFamily:'JetBrains Mono',fontSize:'11px',color:'#555'}}>
+      <span className="live-dot" />
+      <span style={{color:'#555'}}>LIVE</span>
+      <span style={{color:'#333'}}>· updated {label}</span>
+    </div>
+  )
+}
+
+// === VALUE WITH FLASH ===
+function FlashValue({ value, children }) {
+  const prevRef = useRef(value)
+  const [flash, setFlash] = useState(false)
+  useEffect(() => {
+    if (prevRef.current !== value && prevRef.current !== undefined) {
+      setFlash(true)
+      const t = setTimeout(() => setFlash(false), 500)
+      prevRef.current = value
+      return () => clearTimeout(t)
+    }
+    prevRef.current = value
+  }, [value])
+  return <span className={flash ? 'value-flash' : ''}>{children}</span>
+}
+
 // === MAIN FINANCE PAGE ===
 export default function FinancePage() {
   const [unlocked, setUnlocked] = useState(false)
@@ -341,6 +375,8 @@ export default function FinancePage() {
   const [liveHoldings, setLiveHoldings] = useState(null)
   const [selectedHolding, setSelectedHolding] = useState(null)
   const [txFilter, setTxFilter] = useState('all')
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const prevDataRef = useRef(null)
   
   // Toolbar state (minimal for finance page)
   const [focusMode, setFocusMode] = useState(false)
@@ -351,11 +387,55 @@ export default function FinancePage() {
   const [currentTask, setCurrentTask] = useState('Finance review')
   const [captureOpen, setCaptureOpen] = useState(false)
 
+  const fetchAll = useCallback(() => {
+    fetch('/api/finance').then(r => r.json()).then(d => { setData(d); setLastUpdated(Date.now()) }).catch(() => {})
+    fetch('/api/prices').then(r => r.json()).then(d => setLiveHoldings(d.holdings)).catch(() => {})
+  }, [])
+
+  // Check if during ASX market hours (10am-4pm AEST weekdays)
+  const isMarketHours = useCallback(() => {
+    const now = new Date()
+    const aest = new Date(now.toLocaleString('en-US', { timeZone: 'Australia/Sydney' }))
+    const h = aest.getHours(), d = aest.getDay()
+    return d >= 1 && d <= 5 && h >= 10 && h < 16
+  }, [])
+
   useEffect(() => {
     if (!unlocked) return
-    fetch('/api/finance').then(r => r.json()).then(setData).catch(() => {})
-    fetch('/api/prices').then(r => r.json()).then(d => setLiveHoldings(d.holdings)).catch(() => {})
-  }, [unlocked])
+    
+    // Initial fetch
+    fetchAll()
+    
+    // Stripe sync on mount (max once per hour via localStorage)
+    const lastSync = localStorage.getItem('woozy_last_stripe_sync')
+    if (!lastSync || Date.now() - Number(lastSync) > 3600000) {
+      fetch('/api/stripe-sync', { method: 'POST' }).then(() => {
+        localStorage.setItem('woozy_last_stripe_sync', String(Date.now()))
+      }).catch(() => {})
+    }
+    
+    // Auto-refresh all data every 30s
+    const dataInterval = setInterval(fetchAll, 30000)
+    
+    // Price refresh: 15min during market hours, 60min outside
+    let priceInterval = null
+    const setupPriceInterval = () => {
+      if (priceInterval) clearInterval(priceInterval)
+      const ms = isMarketHours() ? 15 * 60 * 1000 : 60 * 60 * 1000
+      priceInterval = setInterval(() => {
+        fetch('/api/prices', { method: 'POST' }).then(r => r.json()).then(d => setLiveHoldings(d.holdings)).catch(() => {})
+      }, ms)
+    }
+    setupPriceInterval()
+    // Re-check market hours every 15 min
+    const marketCheck = setInterval(setupPriceInterval, 15 * 60 * 1000)
+    
+    return () => {
+      clearInterval(dataInterval)
+      if (priceInterval) clearInterval(priceInterval)
+      clearInterval(marketCheck)
+    }
+  }, [unlocked, fetchAll, isMarketHours])
 
   const handleUnlock = useCallback(() => {
     setUnlocked(true)
@@ -423,8 +503,8 @@ export default function FinancePage() {
     return true
   })
 
-  const txTotalIncome = filteredTx.filter(t => t.type === 'income' && t.status === 'completed').reduce((s, t) => s + t.amount, 0)
-  const txTotalExpense = filteredTx.filter(t => t.type === 'expense' && t.status === 'completed').reduce((s, t) => s + t.amount, 0)
+  const txTotalIncome = filteredTx.filter(t => t.type === 'income' && ['completed','cleared','paid'].includes(t.status)).reduce((s, t) => s + t.amount, 0)
+  const txTotalExpense = filteredTx.filter(t => t.type === 'expense' && ['completed','cleared','paid'].includes(t.status)).reduce((s, t) => s + t.amount, 0)
 
   const savingsRate = summary.monthlyIncome > 0 
     ? ((summary.monthlyIncome - summary.monthlyExpenses) / summary.monthlyIncome * 100).toFixed(0) 
@@ -436,11 +516,16 @@ export default function FinancePage() {
     <div style={{maxWidth:'1400px',margin:'0 auto',padding:'1.5rem',fontFamily:'JetBrains Mono, monospace'}}>
       <CommandToolbar {...toolbarProps} />
 
+      {/* LIVE INDICATOR */}
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'0.5rem'}}>
+        <LiveIndicator lastUpdated={lastUpdated} />
+      </div>
+
       {/* NET WORTH HERO */}
       <div className="card full" style={{marginBottom:'1.5rem'}}>
         <div className="section-header">Net Worth</div>
         <div style={{display:'flex',alignItems:'baseline',gap:'1rem',flexWrap:'wrap',marginBottom:'1rem'}}>
-          <span style={{fontSize:'2rem',fontWeight:700,color:'#fff'}}>{fmt(netWorth)}</span>
+          <FlashValue value={netWorth}><span style={{fontSize:'2rem',fontWeight:700,color:'#fff'}}>{fmt(netWorth)}</span></FlashValue>
           <span style={{color: isUp ? '#22c55e' : '#ef4444', fontSize:'0.85rem'}}>
             {isUp ? '+' : ''}{fmt(Math.abs(gain))} ({isUp ? '+' : ''}{gainPct}%)
           </span>
@@ -569,7 +654,12 @@ export default function FinancePage() {
                   {isIncome ? '+' : '-'}{fmt(tr.amount)}
                 </span>
                 <span className="fin-tx-acct">{tr.account_name || '—'}</span>
-                <span className={`status-tag ${tr.status === 'completed' ? 'status-active' : tr.status === 'pending' ? 'status-pending' : 'status-inactive'}`}>{tr.status}</span>
+                <span style={{
+                  fontFamily:'JetBrains Mono',fontSize:'0.65rem',
+                  color: tr.status === 'paid' ? '#888' : ['completed','cleared'].includes(tr.status) ? '#ccc' : tr.status === 'pending' ? '#d97706' : '#555'
+                }}>
+                  {tr.status === 'paid' ? 'PAID · awaiting transfer' : ['completed','cleared'].includes(tr.status) ? 'CLEARED ✓' : tr.status.toUpperCase()}
+                </span>
               </div>
             )
           })}

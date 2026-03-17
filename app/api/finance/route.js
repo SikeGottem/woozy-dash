@@ -49,10 +49,10 @@ export async function GET() {
     const now = new Date()
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const monthlyIncome = transactions
-      .filter(t => t.type === 'income' && t.status === 'completed' && t.date?.startsWith(monthKey))
+      .filter(t => t.type === 'income' && ['completed', 'cleared', 'paid'].includes(t.status) && t.date?.startsWith(monthKey))
       .reduce((s, t) => s + t.amount, 0)
     const monthlyExpenses = transactions
-      .filter(t => t.type === 'expense' && t.status === 'completed' && t.date?.startsWith(monthKey))
+      .filter(t => t.type === 'expense' && ['completed', 'cleared', 'paid'].includes(t.status) && t.date?.startsWith(monthKey))
       .reduce((s, t) => s + t.amount, 0)
 
     const holdingsEnriched = holdings.map(h => ({

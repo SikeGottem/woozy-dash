@@ -83,34 +83,30 @@ function handleCompletedPayment(db, event) {
     ).get(project.id, amount)
     
     if (pending) {
-      db.prepare("UPDATE transactions SET status = 'completed', date = ?, invoice_ref = ? WHERE id = ?")
+      db.prepare("UPDATE transactions SET status = 'paid', date = ?, invoice_ref = ? WHERE id = ?")
         .run(date, obj.id, pending.id)
-      console.log(`[stripe] Updated pending tx #${pending.id} → completed`)
+      console.log(`[stripe] Updated pending tx #${pending.id} → paid (awaiting bank transfer)`)
       
       // Update project paid amount
       db.prepare("UPDATE projects SET paid = COALESCE(paid, 0) + ?, updated_at = datetime('now') WHERE id = ?")
         .run(amount, project.id)
       
-      // Update account balance
-      if (account) {
-        db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?")
-          .run(amount, account.id)
-      }
+      // Don't update account balance — funds not in bank yet (status: paid)
       
       return pending.id
     }
   }
   
-  // Insert new completed transaction
+  // Insert new paid transaction (funds in transit, not yet in bank)
   const result = db.prepare(
     `INSERT INTO transactions (project_id, type, amount, description, date, category, status, invoice_ref, account_id)
-     VALUES (?, 'income', ?, ?, ?, ?, 'completed', ?, ?)`
+     VALUES (?, 'income', ?, ?, ?, ?, 'paid', ?, ?)`
   ).run(
     project?.id || null, amount, description, date,
     category, obj.id, account?.id || null
   )
   
-  console.log(`[stripe] Inserted completed tx #${result.lastInsertRowid}: ${description} — $${amount}`)
+  console.log(`[stripe] Inserted paid tx #${result.lastInsertRowid}: ${description} — $${amount}`)
   
   // Update project paid amount
   if (project) {
@@ -118,11 +114,7 @@ function handleCompletedPayment(db, event) {
       .run(amount, project.id)
   }
   
-  // Update account balance
-  if (account) {
-    db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?")
-      .run(amount, account.id)
-  }
+  // Don't update account balance — funds not in bank yet (status: paid)
   
   return result.lastInsertRowid
 }

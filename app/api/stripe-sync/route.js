@@ -59,7 +59,7 @@ export async function POST() {
       
       const result = db.prepare(
         `INSERT INTO transactions (project_id, type, amount, description, date, category, status, invoice_ref, account_id)
-         VALUES (?, 'income', ?, ?, ?, NULL, 'completed', ?, ?)`
+         VALUES (?, 'income', ?, ?, ?, NULL, 'paid', ?, ?)`
       ).run(projectId, amount, description, date, inv.id, defaultAccount?.id || null)
       
       // Update project paid
@@ -68,11 +68,7 @@ export async function POST() {
           .run(amount, projectId)
       }
       
-      // Update account balance
-      if (defaultAccount) {
-        db.prepare("UPDATE accounts SET balance = balance + ?, updated_at = datetime('now') WHERE id = ?")
-          .run(amount, defaultAccount.id)
-      }
+      // Don't update account balance — funds not in bank yet (status: paid)
       
       // Log
       db.prepare(

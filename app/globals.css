@@ -2506,3 +2506,20 @@ body[data-context-mode="deep"] .section-agents {
 .agent-recent-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; }
 .agent-recent-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #888; cursor: pointer; padding: 0.25rem 0.5rem; border: 1px solid #222; transition: all 0.2s; }
 .agent-recent-tag:hover { color: #fff; border-color: #333; }
+
+/* Live indicator */
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: #22c55e; display: inline-block;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Value flash on change */
+.value-flash { animation: val-flash 0.5s ease; }
+@keyframes val-flash {
+  0% { filter: brightness(2); }
+  100% { filter: brightness(1); }
+}
