@@ -1,7 +1,25 @@
 import { NextResponse } from 'next/server'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
-const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions'
-const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN
+function getGatewayConfig() {
+  // Read token from .env.local to avoid stale shell env vars
+  try {
+    const envPath = join(process.cwd(), '.env.local')
+    const envContent = readFileSync(envPath, 'utf-8')
+    const tokenMatch = envContent.match(/OPENCLAW_GATEWAY_TOKEN=(.+)/)
+    const urlMatch = envContent.match(/OPENCLAW_GATEWAY_URL=(.+)/)
+    return {
+      url: urlMatch?.[1]?.trim() || 'http://127.0.0.1:18789/v1/chat/completions',
+      token: tokenMatch?.[1]?.trim() || process.env.OPENCLAW_GATEWAY_TOKEN || ''
+    }
+  } catch {
+    return {
+      url: process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions',
+      token: process.env.OPENCLAW_GATEWAY_TOKEN || ''
+    }
+  }
+}
 
 export async function POST(request) {
   try {
@@ -12,6 +30,8 @@ export async function POST(request) {
     const targetAgentId = agentId || 'main'
     
     // Send only the latest message — the gateway session has full history
+    const { url: GATEWAY_URL, token: GATEWAY_TOKEN } = getGatewayConfig()
+    console.log('CHAT DEBUG - token present:', !!GATEWAY_TOKEN, 'token length:', GATEWAY_TOKEN?.length, 'token start:', GATEWAY_TOKEN?.slice(0,4))
     const res = await fetch(GATEWAY_URL, {
       method: 'POST',
       headers: {

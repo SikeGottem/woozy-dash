@@ -94,7 +94,10 @@ export default function Home() {
   const [currentTask, setCurrentTask] = useState('Dashboard design')
   
   useEffect(() => {
-    fetch('/api/data').then(r => r.json()).then(setData)
+    const fetchData = () => fetch('/api/data').then(r => r.json()).then(setData).catch(() => {})
+    fetchData()
+    const interval = setInterval(fetchData, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -160,6 +163,7 @@ export default function Home() {
         setTimerSeconds={setTimerSeconds}
         currentTask={currentTask}
         setCurrentTask={setCurrentTask}
+        data={data}
       />
 
       <FocusOverlay
