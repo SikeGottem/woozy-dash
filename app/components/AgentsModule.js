@@ -232,6 +232,9 @@ function AgentCard({ agent, onClick, onKill, compact }) {
           )}
         </div>
       </div>
+      {isRunning && agent.currentThought && (
+        <div className="acc-card-thought">{agent.currentThought}</div>
+      )}
       {!compact && agent.summary && (
         <div className="acc-card-summary">"{agent.summary.slice(0, 60)}"</div>
       )}
@@ -299,7 +302,7 @@ export default function AgentsModule() {
 
   useEffect(() => {
     fetchAgents()
-    const interval = setInterval(fetchAgents, 15000)
+    const interval = setInterval(fetchAgents, 5000)
     return () => clearInterval(interval)
   }, [fetchAgents])
 

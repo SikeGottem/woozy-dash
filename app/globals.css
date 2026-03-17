@@ -1592,6 +1592,12 @@ body::before {
   color: var(--muted); margin-bottom: 0.25rem; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
+.acc-card-thought {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
+  color: #666; margin-bottom: 0.25rem; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; padding-left: 0.5rem;
+  font-style: italic;
+}
 .acc-card-meta {
   display: flex; gap: 1rem; font-family: 'JetBrains Mono', monospace;
   font-size: 0.65rem; color: var(--dim);

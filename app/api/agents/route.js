@@ -99,6 +99,70 @@ function cleanCronLabel(label) {
   return name.trim()
 }
 
+function extractCurrentThought(lines) {
+  // Parse last 20 lines to find current activity
+  const recentLines = lines.slice(-20)
+  let latestToolCall = null
+  let latestThinking = null
+  let latestAssistantText = null
+  let latestTimestamp = 0
+
+  for (const line of recentLines) {
+    try {
+      const entry = JSON.parse(line)
+      if (entry.type !== 'message' || !entry.message) continue
+      
+      const ts = entry.timestamp ? new Date(entry.timestamp).getTime() : 0
+      const msg = entry.message
+      
+      // Skip if too old
+      if (ts < latestTimestamp) continue
+      
+      if (Array.isArray(msg.content)) {
+        for (const part of msg.content) {
+          if (part.type === 'toolCall' && ts >= latestTimestamp) {
+            latestTimestamp = ts
+            const toolName = part.name
+            const args = part.arguments || {}
+            
+            // Format tool calls as human-readable actions
+            if (toolName === 'read' || toolName === 'Read') {
+              latestToolCall = `reading ${args.file_path || args.path || ''}`
+            } else if (toolName === 'edit' || toolName === 'Edit') {
+              latestToolCall = `editing ${args.file_path || args.path || ''}`
+            } else if (toolName === 'write' || toolName === 'Write') {
+              latestToolCall = `writing ${args.file_path || args.path || ''}`
+            } else if (toolName === 'exec') {
+              const cmd = args.command || ''
+              latestToolCall = `running \`${cmd.slice(0, 40)}${cmd.length > 40 ? '...' : ''}\``
+            } else if (toolName === 'web_search') {
+              latestToolCall = `searching: ${args.query || ''}`
+            } else if (toolName === 'web_fetch') {
+              latestToolCall = `fetching ${args.url || ''}`
+            } else if (toolName === 'sessions_spawn') {
+              latestToolCall = `spawning sub-agent`
+            } else {
+              latestToolCall = toolName
+            }
+          } else if (part.type === 'thinking' && ts >= latestTimestamp && part.text) {
+            latestThinking = part.text.slice(0, 80)
+          } else if (part.type === 'text' && ts >= latestTimestamp && part.text && msg.role === 'assistant') {
+            latestAssistantText = part.text.slice(0, 80)
+          }
+        }
+      } else if (typeof msg.content === 'string' && msg.role === 'assistant' && ts >= latestTimestamp) {
+        latestAssistantText = msg.content.slice(0, 80)
+      }
+    } catch {}
+  }
+  
+  // Priority order: tool call > thinking > assistant text > fallback
+  if (latestToolCall) return latestToolCall
+  if (latestThinking) return latestThinking + (latestThinking.length === 80 ? '...' : '')
+  if (latestAssistantText) return latestAssistantText + (latestAssistantText.length === 80 ? '...' : '')
+  return 'Working...'
+}
+
 function parseSession(filePath, maxMessages = 100) {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
@@ -115,6 +179,7 @@ function parseSession(filePath, maxMessages = 100) {
     let firstUserMessage = ''
     let lastAssistantMessage = ''
     let secondLastAssistantMessage = ''
+    let currentThought = null
 
     for (const line of lines) {
       try {
@@ -187,6 +252,9 @@ function parseSession(filePath, maxMessages = 100) {
 
     const usage = { totalTokens, inputTokens, outputTokens, cacheReadTokens }
     const cost = calculateCost(inputTokens || outputTokens ? usage : { totalTokens })
+    
+    // Extract current thought from recent activity
+    currentThought = extractCurrentThought(lines)
 
     return {
       messages,
@@ -197,6 +265,7 @@ function parseSession(filePath, maxMessages = 100) {
       toolsUsed: [...toolsUsed],
       firstUserMessage,
       summary,
+      currentThought,
       startTime: firstTimestamp,
       endTime: lastTimestamp,
       duration: firstTimestamp && lastTimestamp ? Math.round((lastTimestamp - firstTimestamp) / 1000) : 0,
@@ -244,6 +313,7 @@ export async function GET(request) {
         usage: parsed?.usage || {},
         cost: parsed?.cost || 0,
         toolsUsed: parsed?.toolsUsed || [],
+        currentThought: parsed?.currentThought || null,
         startTime: parsed?.startTime,
         endTime: parsed?.endTime,
         duration: parsed?.duration || 0,
@@ -331,6 +401,7 @@ export async function GET(request) {
       cost: parsed.cost,
       toolsUsed: parsed.toolsUsed,
       summary: parsed.summary,
+      currentThought: status === 'running' ? parsed.currentThought : null,
     }
 
     // Group cron runs
@@ -420,8 +491,13 @@ export async function POST(request) {
     }
     const message = templateMessages[template] || `Use sessions_spawn to run this task: ${task}`
 
-    const gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions'
-    const gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN
+    let gatewayUrl = process.env.OPENCLAW_GATEWAY_URL || 'http://127.0.0.1:18789/v1/chat/completions'
+    let gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN
+    try {
+      const envContent = fs.readFileSync(path.join(process.cwd(), '.env.local'), 'utf-8')
+      const tm = envContent.match(/OPENCLAW_GATEWAY_TOKEN=(.+)/); if (tm) gatewayToken = tm[1].trim()
+      const um = envContent.match(/OPENCLAW_GATEWAY_URL=(.+)/); if (um) gatewayUrl = um[1].trim()
+    } catch {}
     const response = await fetch(gatewayUrl, {
       method: 'POST',
       headers: {
