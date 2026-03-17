@@ -621,269 +621,166 @@ body::before {
 
 /* Command HUD */
 .command-hud {
-  display: grid; grid-template-columns: 1fr auto 1fr; gap: 1rem; 
-  align-items: center; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
-  background: #111;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 1rem; 
+  align-items: center; padding: 0.6rem 1rem; margin-bottom: 1.5rem;
+  background: #0a0a0a;
   border: 1px solid #222; border-radius: 0;
   position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace;
-  box-shadow: none;
 }
 
-.command-hud::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: none;
-}
-
-/* Left Section: Context & Task */
+/* Left: Context + Focus field */
 .hud-left {
-  display: flex; align-items: center; gap: 1rem; justify-self: start;
-}
-
-.context-indicator {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 0.75rem; justify-self: start;
 }
 
 .context-mode {
-  display: flex; align-items: center; gap: 0.5rem; 
-  border-radius: 0; padding: 0.4rem 0.8rem; cursor: pointer;
-  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 600;
+  display: flex; align-items: center; gap: 0.4rem; 
+  border-radius: 0; padding: 0.3rem 0.6rem; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.05em;
-  transition: all 0.2s; position: relative;
+  transition: all 0.15s; background: transparent;
 }
-
-.context-uni {
-  background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #3b82f6;
-}
-
-.context-uni:hover {
-  background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.5);
-}
-
-.context-uni .context-dot {
-  background: #3b82f6; box-shadow: none;
-}
-
-.context-work {
-  background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;
-}
-
-.context-work:hover {
-  background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.5);
-}
-
-.context-work .context-dot {
-  background: #10b981; box-shadow: none;
-}
-
-.context-personal {
-  background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); color: #8b5cf6;
-}
-
-.context-personal:hover {
-  background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.5);
-}
-
-.context-personal .context-dot {
-  background: #8b5cf6; box-shadow: none;
-}
-
-.context-deep {
-  background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); color: #f59e0b;
-}
-
-.context-deep:hover {
-  background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.5);
-}
-
-.context-deep .context-dot {
-  background: #f59e0b; box-shadow: none;
-}
+.context-uni { border: 1px solid #222; color: #888; }
+.context-uni:hover { border-color: #444; color: #ccc; }
+.context-uni .context-dot { background: #3b82f6; }
+.context-work { border: 1px solid #222; color: #888; }
+.context-work:hover { border-color: #444; color: #ccc; }
+.context-work .context-dot { background: #10b981; }
+.context-personal { border: 1px solid #222; color: #888; }
+.context-personal:hover { border-color: #444; color: #ccc; }
+.context-personal .context-dot { background: #8b5cf6; }
+.context-deep { border: 1px solid #222; color: #888; }
+.context-deep:hover { border-color: #444; color: #ccc; }
+.context-deep .context-dot { background: #f59e0b; }
 
 .context-dot {
-  width: 8px; height: 8px; border-radius: 0;
-  animation: context-pulse 2s ease-in-out infinite;
+  width: 6px; height: 6px; border-radius: 0;
+}
+.context-label { font-size: 11px; font-weight: 700; }
+
+/* Terminal-style focus field */
+.hud-focus-field {
+  display: flex; align-items: center; gap: 0.4rem; cursor: pointer;
+  padding: 0.25rem 0.5rem; border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.hud-focus-field:hover { border-color: #222; }
+
+.focus-prompt {
+  color: #555; font-size: 13px; font-weight: 700; user-select: none;
+}
+.focus-text {
+  font-size: 12px; color: #ccc; font-weight: 500;
+  max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.focus-input {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #fff;
+  background: transparent; border: none; outline: none; caret-color: #fff;
+  width: 220px; font-weight: 500;
 }
 
-@keyframes context-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.1); }
-}
-
-.context-label {
-  font-size: 0.65rem; font-weight: 700;
-}
-
-.current-task {
-  display: flex; align-items: center; gap: 0.5rem; color: #ccc;
-  cursor: pointer; transition: all 0.2s; padding: 0.25rem 0.5rem; border-radius: 0;
-}
-
-.current-task:hover {
-  background: #0f0f0f; color: rgba(255,255,255,1);
-}
-
-.current-task:hover .task-text {
-  color: #fff;
-}
-
-.task-prefix {
-  font-size: 0.6rem; color: var(--muted); text-transform: uppercase; 
-  letter-spacing: 0.1em; font-weight: 700;
-}
-
-.task-text {
-  font-size: 0.75rem; color: #fff; font-weight: 600;
-  max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-/* Center Section: Quick Actions */
+/* Center: Status line + buttons */
 .hud-center {
-  display: flex; align-items: center; gap: 0.4rem; justify-self: center;
+  display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+  justify-self: center;
 }
 
-.hud-action {
-  display: flex; flex-direction: column; align-items: center; gap: 0.2rem;
-  width: 44px; height: 44px; background: #0f0f0f;
-  border: 1px solid #222; border-radius: 0;
-  cursor: pointer; transition: all 0.2s; position: relative; font-family: 'JetBrains Mono', monospace;
+.hud-status-line {
+  display: flex; align-items: center; gap: 1rem; font-size: 11px;
+  color: #555; white-space: nowrap;
+}
+.status-line-text { color: #666; }
+.status-line-alert { color: #ef4444; }
+.status-line-dim { color: #444; }
+.status-line-event { color: #666; }
+.status-line-event.event-urgent { color: #e5e5e5; font-weight: 600; }
+
+.hud-actions {
+  display: flex; align-items: center; gap: 0.35rem;
 }
 
-.hud-action:hover {
-  background: #151515; border-color: #333;
-  
+.hud-btn {
+  display: flex; align-items: center; justify-content: center;
+  height: 28px; min-width: 28px; padding: 0 0.5rem;
+  background: #111; border: 1px solid #222; border-radius: 0;
+  cursor: pointer; transition: all 0.15s; position: relative;
+  font-family: 'JetBrains Mono', monospace;
 }
+.hud-btn:hover { background: #1a1a1a; border-color: #333; }
+.hud-btn-active { background: #1a1a1a; border-color: #444; }
 
-.hud-action-active {
-  background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15);
-  box-shadow: none;
+.btn-content {
+  font-size: 11px; font-weight: 600; color: #999;
+  white-space: nowrap; letter-spacing: 0.02em;
 }
+.hud-btn-active .btn-content { color: #fff; }
+.hud-btn:hover .btn-content { color: #ccc; }
 
-.hud-action-active::before {
-  content: ''; position: absolute; top: -1px; left: -1px; right: -1px; height: 2px;
-  background: none;
-  border-radius: 0 8px 0 0;
+.pomo-dots {
+  display: flex; align-items: center; margin-left: 0.25rem;
+  font-size: 13px; color: #555; line-height: 1;
 }
+.pomo-dot { line-height: 1; }
 
-.action-key {
-  font-size: 0.8rem; font-weight: 700; color: #e0e0e0;
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
-
-.hud-action-active .action-key {
-  color: #fff;
-}
-
-.action-timer {
-  position: absolute; bottom: 2px; font-size: 0.5rem; color: #fff;
-  font-weight: 600; white-space: nowrap;
-}
-
-.energy-bar {
-  position: absolute; bottom: 4px; font-size: 0.5rem; color: #999;
-  letter-spacing: 0.1em;
-}
-
-/* Right Section: Status & System */
+/* Right: Time + urgency + lock */
 .hud-right {
-  display: flex; align-items: center; gap: 1rem; justify-self: end;
+  display: flex; align-items: center; gap: 0.75rem; justify-self: end;
 }
 
-.status-cluster {
-  display: flex; align-items: center; gap: 1rem;
+.hud-time-cluster {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0;
+}
+.hud-date {
+  font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.hud-time {
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.time-value {
+  font-size: 13px; color: #e0e0e0; font-weight: 600; letter-spacing: 0.02em;
 }
 
-.status-item {
-  display: flex; flex-direction: column; align-items: flex-end;
+.urgency-dot {
+  width: 7px; height: 7px; border-radius: 50%; display: inline-block;
 }
+.urgency-red { background: #ef4444; }
+.urgency-amber { background: #eab308; }
+.urgency-green { background: #22c55e; opacity: 0.7; }
 
-.status-label {
-  font-size: 0.55rem; color: var(--muted); text-transform: uppercase;
-  letter-spacing: 0.08em; font-weight: 600; margin-bottom: 1px;
-}
-
-.status-value {
-  font-size: 0.7rem; color: #e0e0e0; font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.status-online {
-  color: #fff;
-}
-
-.status-focus {
-  color: rgba(251,191,36,0.8);
-  animation: focus-glow 1.5s ease-in-out infinite;
-}
-
-@keyframes focus-glow {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
+.hud-mode-tag {
+  font-size: 9px; color: #eab308; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .hud-system {
-  width: 36px; height: 36px; background: #0f0f0f;
+  width: 28px; height: 28px; background: #111;
   border: 1px solid #222; border-radius: 0;
-  cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;
-  color: #888;
+  cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  color: #555;
 }
-
 .hud-system:hover {
-  background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3);
-  color: rgba(239,68,68,0.8); 
+  background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.3);
+  color: rgba(239,68,68,0.7);
 }
 
-/* Mobile Responsive */
+/* Mobile */
 @media (max-width: 768px) {
   .command-hud {
     grid-template-columns: 1fr; grid-template-rows: auto auto auto;
-    gap: 0.75rem; padding: 1rem;
+    gap: 0.5rem; padding: 0.75rem;
   }
-  
-  .hud-left {
-    justify-self: center; order: 2;
-  }
-  
-  .hud-center {
-    justify-self: center; order: 1;
-  }
-  
-  .hud-right {
-    justify-self: center; order: 3;
-  }
-  
-  .current-task {
-    flex-direction: column; gap: 0.25rem; text-align: center;
-  }
-  
-  .task-text {
-    max-width: 250px;
-  }
-  
-  .status-cluster {
-    gap: 0.75rem;
-  }
+  .hud-left { justify-self: center; order: 1; }
+  .hud-center { justify-self: center; order: 2; }
+  .hud-right { justify-self: center; order: 3; }
+  .hud-status-line { flex-wrap: wrap; justify-content: center; }
+  .focus-text, .focus-input { max-width: 180px; width: 180px; }
 }
 
 @media (max-width: 480px) {
-  .command-hud {
-    padding: 0.75rem;
-  }
-  
-  .hud-action {
-    width: 40px; height: 40px;
-  }
-  
-  .action-key {
-    font-size: 0.7rem;
-  }
-  
-  .context-mode {
-    padding: 0.3rem 0.6rem;
-  }
-  
-  .context-label {
-    font-size: 0.6rem;
-  }
+  .command-hud { padding: 0.5rem; }
+  .hud-btn { height: 26px; padding: 0 0.35rem; }
+  .btn-content { font-size: 10px; }
+  .context-mode { padding: 0.2rem 0.4rem; }
 }
 
 /* Main Sections */

@@ -134,6 +134,7 @@ function ChatMessage({ message, isUser }) {
 // === CHAT PANEL ===
 export default function ChatPanel() {
   const [open, setOpen] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -144,6 +145,21 @@ export default function ChatPanel() {
   useEffect(() => { if (open) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'instant' }), 50) }, [open])
   useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50) }, [open])
 
+  const handleToggle = () => {
+    if (open) {
+      // Start closing animation
+      setIsClosing(true)
+      // Wait for animation to complete before unmounting
+      setTimeout(() => {
+        setOpen(false)
+        setIsClosing(false)
+      }, 300)
+    } else {
+      // Open immediately - animation will be handled by CSS
+      setOpen(true)
+    }
+  }
+
   useEffect(() => {
     const handler = (e) => {
       if (e.key === '\\' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -151,12 +167,12 @@ export default function ChatPanel() {
         if (!isOurInput && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) return
         e.preventDefault()
         e.stopImmediatePropagation()
-        setOpen(prev => !prev)
+        handleToggle()
       }
     }
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
-  }, [])
+  }, [open])
   
   const mergeMessages = useCallback((serverMsgs, localMsgs) => {
     const all = [...serverMsgs, ...localMsgs]
@@ -220,15 +236,15 @@ export default function ChatPanel() {
 
   const clearHistory = () => { setMessages([]); localStorage.removeItem('woozy-chat'); localStorage.removeItem('woozy-chat-backup') }
 
-  if (!open) return <button className="chat-fab" onClick={() => setOpen(true)}><span className="chat-fab-icon">⌘</span></button>
+  if (!open) return <button className="chat-fab" onClick={handleToggle}><span className="chat-fab-icon">⌘</span></button>
 
   return (
-    <div className="chat-panel">
+    <div className={`chat-panel ${isClosing ? 'closing' : ''}`}>
       <div className="chat-header">
         <span className="chat-header-title">WOOZY TERMINAL</span>
         <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
           <button className="chat-clear" onClick={clearHistory} title="Clear local history">⌫</button>
-          <button className="chat-close" onClick={() => setOpen(false)}>✕</button>
+          <button className="chat-close" onClick={handleToggle}>✕</button>
         </div>
       </div>
       <div className="chat-messages">
