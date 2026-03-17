@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 const TASK_TEMPLATES = [
   { id: 'research', name: 'RESEARCH', description: 'Spawn a research sub-agent' },
@@ -8,6 +8,56 @@ const TASK_TEMPLATES = [
   { id: 'review', name: 'REVIEW', description: 'Spawn a review/audit agent' },
 ]
 
+function formatTokens(n) {
+  if (!n) return '0'
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'k'
+  return String(n)
+}
+
+function formatCost(c) {
+  if (!c || c < 0.001) return '$0.00'
+  if (c < 0.01) return '$' + c.toFixed(3)
+  return '$' + c.toFixed(2)
+}
+
+function costClass(c) {
+  if (!c || c < 0.10) return 'cost-low'
+  if (c < 0.50) return 'cost-med'
+  return 'cost-high'
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '--'
+  if (seconds < 60) return seconds + 's'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s > 0 ? `${m}m${s}s` : `${m}m`
+}
+
+function formatTime(ts) {
+  if (!ts) return '--'
+  return new Date(ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+function formatElapsed(ts) {
+  if (!ts) return '--'
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
+
+function TypeBadge({ type }) {
+  const cls = type === 'cron' || type === 'cron-run' ? 'type-badge-cron' : 'type-badge-subagent'
+  const label = type === 'cron' || type === 'cron-run' ? 'CRON' : 'SUBAGENT'
+  return <span className={`acc-type-badge ${cls}`}>{label}</span>
+}
+
+// === SPAWN MODAL (kept as-is) ===
 function AgentSpawnModal({ isOpen, template, onClose, onSpawn }) {
   const [task, setTask] = useState('')
   const [model, setModel] = useState('sonnet')
@@ -32,18 +82,13 @@ function AgentSpawnModal({ isOpen, template, onClose, onSpawn }) {
     if (!task.trim() || spawning) return
     setSpawning(true)
     try {
-      const message = `Spawn a ${template?.id} agent with task: ${task.trim()}`
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message: `Spawn a ${template?.id} agent with task: ${task.trim()}` })
       })
-      if (response.ok) {
-        setTimeout(() => { onSpawn(); onClose() }, 1000)
-      }
-    } catch (error) {
-      console.error('Spawn error:', error)
-    }
+      if (response.ok) setTimeout(() => { onSpawn(); onClose() }, 1000)
+    } catch (error) { console.error('Spawn error:', error) }
     setSpawning(false)
   }
 
@@ -74,293 +119,317 @@ function AgentSpawnModal({ isOpen, template, onClose, onSpawn }) {
   )
 }
 
+// === DETAIL PANEL ===
 function AgentDetail({ agentId, onClose }) {
   const [data, setData] = useState(null)
-  const [chatMessages, setChatMessages] = useState([])
-  const [chatInput, setChatInput] = useState('')
-  const [sending, setSending] = useState(false)
-  const [dmMode, setDmMode] = useState(false)
-  const chatInputRef = useRef(null)
-  const chatEndRef = useRef(null)
+  const [expanded, setExpanded] = useState({})
+  const [showThinking, setShowThinking] = useState({})
+  const endRef = useRef(null)
 
   useEffect(() => {
     fetch(`/api/agents?detail=${agentId}`).then(r => r.json()).then(d => setData(d.agent)).catch(() => {})
   }, [agentId])
 
-  useEffect(() => {
-    if (data && data.transcript && data.transcript.messages) {
-      setChatMessages(data.transcript.messages.map(m => ({
-        id: Date.now() + Math.random(),
-        role: m.role, content: m.content,
-        timestamp: m.ts || Date.now(), fromTranscript: true
-      })))
-    }
-  }, [data])
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [data])
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages])
+  if (!data) return <div className="acc-detail-loading">Loading transcript...</div>
 
-  const sendMessage = async () => {
-    if (!chatInput.trim() || sending) return
-    const userMessage = { id: Date.now(), role: 'user', content: chatInput.trim(), timestamp: Date.now(), fromTranscript: false }
-    setChatMessages(prev => [...prev, userMessage])
-    setChatInput('')
-    setSending(true)
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage.content, sessionKey: `agent:main:${agentId}`, agentId })
-      })
-      const result = await response.json()
-      if (response.ok) {
-        setChatMessages(prev => [...prev, { id: Date.now() + 1, role: 'assistant', content: result.reply, timestamp: Date.now(), fromTranscript: false }])
-      } else {
-        setChatMessages(prev => [...prev, { id: Date.now() + 1, role: 'system', content: `Error: ${result.error}`, timestamp: Date.now(), fromTranscript: false }])
-      }
-    } catch (error) {
-      setChatMessages(prev => [...prev, { id: Date.now() + 1, role: 'system', content: `Connection error: ${error.message}`, timestamp: Date.now(), fromTranscript: false }])
-    } finally {
-      setSending(false)
-    }
-  }
-
-  if (!data) return <div className="agent-detail-loading">Loading session data...</div>
-
-  const t = data.transcript
-  const estimatedCost = t && t.totalTokens ? (t.totalTokens * 0.000003).toFixed(4) : null
-  const isActive = data.latestSession && (Date.now() - data.latestSession.mtime < 3600000)
+  const toggleExpand = (i) => setExpanded(prev => ({ ...prev, [i]: !prev[i] }))
+  const toggleThinking = (i) => setShowThinking(prev => ({ ...prev, [i]: !prev[i] }))
 
   return (
-    <div className="agent-monitor">
-      <div className="agent-monitor-header">
-        <button className="agent-monitor-back" onClick={onClose}>← BACK</button>
-        <div className="agent-monitor-title">{data.name}</div>
-        <div className="agent-monitor-controls">
-          <button className={`agent-mode-toggle ${dmMode ? 'mode-dm' : 'mode-monitor'}`} onClick={() => setDmMode(!dmMode)}>{dmMode ? 'DM' : 'MONITOR'}</button>
-          <div className={`agent-monitor-status ${isActive ? 'status-running' : 'status-idle'}`}>{isActive ? 'ONLINE' : 'OFFLINE'}</div>
-        </div>
+    <div className="acc-detail">
+      <div className="acc-detail-header">
+        <button className="acc-back-btn" onClick={onClose}>← BACK</button>
+        <div className="acc-detail-title">{data.name}</div>
+        <TypeBadge type={data.type} />
       </div>
-
-      {!dmMode && (
-        <>
-          <div className="agent-monitor-stats">
-            <div className="agent-stat"><div className="agent-stat-value">{data.sessionCount}</div><div className="agent-stat-label">SESSIONS</div></div>
-            <div className="agent-stat"><div className="agent-stat-value">{t && t.totalTokens ? t.totalTokens.toLocaleString() : '0'}</div><div className="agent-stat-label">TOKENS</div></div>
-            <div className="agent-stat"><div className="agent-stat-value">{estimatedCost ? `$${estimatedCost}` : '$0.00'}</div><div className="agent-stat-label">EST COST</div></div>
-            <div className="agent-stat"><div className="agent-stat-value">{data.latestSession ? new Date(data.latestSession.mtime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '--'}</div><div className="agent-stat-label">LAST SEEN</div></div>
-          </div>
-          <div className="agent-monitor-meta">
-            <div className="agent-meta-grid">
-              <div className="agent-meta-item"><span className="agent-meta-key">ID</span><span className="agent-meta-val">{data.id}</span></div>
-              <div className="agent-meta-item"><span className="agent-meta-key">MODEL</span><span className="agent-meta-val">{data.model}</span></div>
-              {data.workspace && <div className="agent-meta-item"><span className="agent-meta-key">WORKSPACE</span><span className="agent-meta-val agent-meta-path">{data.workspace.replace('/Users/ethanwu/', '~/')}</span></div>}
-            </div>
-          </div>
-          {t && t.toolsUsed.length > 0 && (
-            <div className="agent-monitor-section">
-              <div className="agent-section-title">TOOLS USED</div>
-              <div className="agent-tools-used">{t.toolsUsed.map((tool, i) => <span key={i} className="agent-tool-badge">{tool}</span>)}</div>
-            </div>
-          )}
-          {t && t.messages.length > 0 && (
-            <div className="agent-monitor-section">
-              <div className="agent-section-title">SESSION TRANSCRIPT</div>
-              <div className="agent-transcript">
-                {t.messages.map((m, i) => (
-                  <div key={i} className={`agent-transcript-msg ${m.role}`}>
-                    <div className="agent-msg-header">
-                      <span className="agent-msg-role">{m.role.toUpperCase()}</span>
-                      <span className="agent-msg-time">{new Date(m.ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    <div className="agent-msg-body">{m.content}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+      <div className="acc-detail-meta">
+        <span>{formatDuration(data.duration)}</span>
+        <span>{formatTokens(data.totalTokens)} tokens</span>
+        <span className={costClass(data.cost)}>{formatCost(data.cost)}</span>
+        <span>{data.model}</span>
+      </div>
+      {data.toolsUsed?.length > 0 && (
+        <div className="acc-detail-tools">
+          {data.toolsUsed.map((t, i) => <span key={i} className="acc-tool-badge">[{t}]</span>)}
+        </div>
       )}
-
-      {dmMode && (
-        <div className="agent-dm-container">
-          <div className="agent-dm-header">
-            <div className="agent-dm-title">Direct Message with {data.name}</div>
-            <div className={`agent-dm-status ${isActive ? 'dm-online' : 'dm-offline'}`}>{isActive ? '● Online' : '○ Offline'}</div>
-          </div>
-          <div className="agent-dm-messages">
-            {chatMessages.map((msg) => (
-              <div key={msg.id} className={`dm-message ${msg.role}`}>
-                <div className="dm-message-content">{msg.content}</div>
-                <div className="dm-message-meta">
-                  <span className="dm-message-time">{new Date(msg.timestamp).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</span>
-                  {msg.fromTranscript && <span className="dm-message-source">transcript</span>}
-                </div>
-              </div>
-            ))}
-            {sending && (
-              <div className="dm-message assistant">
-                <div className="dm-message-content dm-typing">{data.name} is thinking<span className="dm-typing-dots">...</span></div>
+      <div className="acc-transcript">
+        {data.transcript?.map((msg, i) => (
+          <div key={i} className={`acc-msg acc-msg-${msg.role}`}>
+            <div className="acc-msg-header">
+              <span className={`acc-role-badge role-${msg.role}`}>{msg.role.toUpperCase()}</span>
+              <span className="acc-msg-time">{formatTime(msg.ts)}</span>
+            </div>
+            {msg.thinking?.length > 0 && (
+              <div className="acc-thinking-block">
+                <button className="acc-thinking-toggle" onClick={() => toggleThinking(i)}>
+                  {showThinking[i] ? '▾ THINKING' : '▸ THINKING'}
+                </button>
+                {showThinking[i] && <div className="acc-thinking-content">{msg.thinking.join('\n\n')}</div>}
               </div>
             )}
-            <div ref={chatEndRef} />
-          </div>
-          <div className="agent-dm-input">
-            <div className="dm-input-container">
-              <input ref={chatInputRef} type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !sending) sendMessage() }} placeholder={`Message ${data.name}...`} disabled={sending} className="dm-input" />
-              <button onClick={sendMessage} disabled={!chatInput.trim() || sending} className="dm-send-btn">{sending ? '...' : '→'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function AgentPipelineView({ agents, onAgentClick }) {
-  const running = agents.filter(a => a.status === 'running' || a.status === 'active')
-  const recent = agents.filter(a => a.status !== 'running' && a.status !== 'active' && a.lastActive && Date.now() - a.lastActive < 3600000).slice(0, 3)
-
-  const formatElapsed = (lastActive) => {
-    if (!lastActive) return '--'
-    const diff = Date.now() - lastActive
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return 'Now'
-    if (mins < 60) return `${mins}m ago`
-    return `${Math.floor(mins / 60)}h ago`
-  }
-
-  if (running.length === 0 && recent.length === 0) {
-    return <div className="pipeline-empty">No active agents. Use task spawn buttons or chat to create one.</div>
-  }
-
-  return (
-    <div className="agent-pipeline">
-      {running.map(agent => (
-        <div key={agent.id} className="agent-pipeline-card card-running" onClick={() => onAgentClick(agent.id)}>
-          <div className="agent-card-header">
-            <div className="agent-card-name">{agent.name}</div>
-            <div className="agent-card-status status-running">RUNNING</div>
-          </div>
-          <div className="agent-card-task">{agent.taskDescription?.substring(0, 100) || agent.lastMessage?.substring(0, 100) || 'Working...'}</div>
-          <div className="agent-card-meta">
-            <span className="agent-card-time">{formatElapsed(agent.lastActive)}</span>
-            <span className="agent-card-model">{agent.model}</span>
-          </div>
-          <div className="agent-card-pulse"></div>
-        </div>
-      ))}
-      {recent.length > 0 && (
-        <div className="agent-recent-row">
-          <span style={{color:'#666',fontSize:'0.75rem',fontFamily:'JetBrains Mono, monospace'}}>RECENT:</span>
-          {recent.map(agent => (
-            <span key={agent.id} className="agent-recent-tag" onClick={() => onAgentClick(agent.id)}>
-              {agent.name?.substring(0, 30)} · {formatElapsed(agent.lastActive)}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function AgentHistoryLog({ agents }) {
-  const recentActivity = agents.filter(a => a.lastActive).sort((a, b) => b.lastActive - a.lastActive).slice(0, 8)
-
-  const formatActivity = (agent) => {
-    const time = new Date(agent.lastActive).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
-    const task = agent.lastMessage?.substring(0, 60) || 'Task completed'
-    return `${agent.name}: ${task} — ${time}`
-  }
-
-  return (
-    <div className="agent-history">
-      <div className="agent-section-title">RECENT ACTIVITY</div>
-      <div className="agent-history-list">
-        {recentActivity.map((agent, i) => (
-          <div key={agent.id} className="agent-history-item">
-            <span className="agent-history-text">{formatActivity(agent)}</span>
+            {msg.toolCalls?.length > 0 && (
+              <div className="acc-msg-tools">
+                {msg.toolCalls.map((tc, j) => <span key={j} className="acc-tool-badge">[{tc.name}]</span>)}
+              </div>
+            )}
+            {msg.content && (
+              <div className="acc-msg-body">
+                {msg.content.length > 500 && !expanded[i] ? (
+                  <>
+                    {msg.content.slice(0, 500)}...
+                    <button className="acc-show-more" onClick={() => toggleExpand(i)}>SHOW MORE</button>
+                  </>
+                ) : (
+                  <>
+                    {msg.content}
+                    {msg.content.length > 500 && <button className="acc-show-more" onClick={() => toggleExpand(i)}>SHOW LESS</button>}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ))}
-        {recentActivity.length === 0 && <div className="agent-history-empty">No recent agent activity</div>}
+        <div ref={endRef} />
       </div>
     </div>
   )
 }
 
+// === KILL CONFIRM ===
+function KillConfirm({ agent, onConfirm, onCancel }) {
+  return (
+    <div className="acc-kill-confirm">
+      <span>Kill {agent.name}?</span>
+      <button className="acc-kill-yes" onClick={onConfirm}>YES</button>
+      <button className="acc-kill-cancel" onClick={onCancel}>CANCEL</button>
+    </div>
+  )
+}
+
+// === AGENT CARD ===
+function AgentCard({ agent, onClick, onKill, compact }) {
+  const [confirmKill, setConfirmKill] = useState(false)
+  const isRunning = agent.status === 'running'
+
+  const handleKill = async () => {
+    setConfirmKill(false)
+    onKill(agent)
+  }
+
+  return (
+    <div className={`acc-card ${isRunning ? 'acc-card-running' : ''} ${compact ? 'acc-card-compact' : ''}`} onClick={() => onClick(agent.id)}>
+      {isRunning && <div className="acc-pulse" />}
+      <div className="acc-card-top">
+        <div className="acc-card-name">{agent.name}</div>
+        <div className="acc-card-right">
+          <TypeBadge type={agent.type} />
+          {agent.runCount > 0 && <span className="acc-run-count">ran {agent.runCount}x</span>}
+          {isRunning && (
+            <button className="acc-kill-btn" onClick={e => { e.stopPropagation(); setConfirmKill(true) }}>KILL</button>
+          )}
+        </div>
+      </div>
+      {!compact && agent.summary && (
+        <div className="acc-card-summary">"{agent.summary.slice(0, 60)}"</div>
+      )}
+      <div className="acc-card-meta">
+        <span>{formatElapsed(agent.lastActive)}</span>
+        <span>{formatTokens(agent.totalTokens)}</span>
+        <span className={costClass(agent.cost)}>{formatCost(agent.cost)}</span>
+        <span>{formatDuration(agent.duration)}</span>
+      </div>
+      {confirmKill && (
+        <div onClick={e => e.stopPropagation()}>
+          <KillConfirm agent={agent} onConfirm={handleKill} onCancel={() => setConfirmKill(false)} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// === TIMELINE ===
+function ActivityTimeline({ timeline }) {
+  if (!timeline?.length) return null
+  return (
+    <div className="acc-timeline">
+      <div className="acc-section-title">ACTIVITY FEED</div>
+      {timeline.map((entry, i) => {
+        const icon = entry.status === 'running' ? '●' : entry.status === 'killed' ? '✗' : '✓'
+        const iconClass = entry.status === 'running' ? 'tl-running' : entry.status === 'killed' ? 'tl-failed' : 'tl-complete'
+        return (
+          <div key={i} className="acc-tl-entry">
+            <span className="acc-tl-time">{formatTime(entry.endTime || entry.startTime)}</span>
+            <span className="acc-tl-sep"> — </span>
+            <span className="acc-tl-name">{entry.name}</span>
+            <span className={`acc-tl-icon ${iconClass}`}> {icon} </span>
+            {entry.summary && <span className="acc-tl-summary">"{entry.summary.slice(0, 40)}"</span>}
+            <span className="acc-tl-stats">
+              [{formatDuration(entry.duration)}, {formatTokens(entry.tokens)}]
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// === MAIN MODULE ===
 export default function AgentsModule() {
   const [agents, setAgents] = useState([])
+  const [stats, setStats] = useState({})
+  const [timeline, setTimeline] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedAgent, setSelectedAgent] = useState(null)
+  const [showAll, setShowAll] = useState(false)
   const [spawnModal, setSpawnModal] = useState({ open: false, template: null })
 
+  const fetchAgents = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agents')
+      const data = await res.json()
+      setAgents(data.agents || [])
+      setStats(data.stats || {})
+      setTimeline(data.timeline || [])
+    } catch (err) { console.error('Fetch agents error:', err) }
+    finally { setLoading(false) }
+  }, [])
+
   useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const res = await fetch('/api/agents')
-        const data = await res.json()
-        setAgents(data.agents || [])
-      } catch (err) {
-        console.error('Failed to fetch agents:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchAgents()
     const interval = setInterval(fetchAgents, 15000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchAgents])
 
-  const handleSpawnAgent = () => {
-    fetch('/api/agents').then(r => r.json()).then(data => setAgents(data.agents || [])).catch(() => {})
+  const handleKill = async (agent) => {
+    try {
+      await fetch('/api/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'kill', sessionId: agent.id })
+      })
+      fetchAgents()
+    } catch (err) { console.error('Kill error:', err) }
   }
 
   if (loading) {
-    return <div className="card full"><div className="section-header">Agent Command Center</div><div className="empty-state">Initializing agent systems...</div></div>
+    return <div className="card full"><div className="section-header">Agent Command Center</div><div className="empty-state">Initializing...</div></div>
   }
 
   if (selectedAgent) {
     return <div className="card full"><AgentDetail agentId={selectedAgent} onClose={() => setSelectedAgent(null)} /></div>
   }
 
-  const runningCount = agents.filter(a => a.status === 'active').length
+  const now = Date.now()
+  const fiveMinAgo = now - 5 * 60 * 1000
+  const twoHoursAgo = now - 2 * 60 * 60 * 1000
+
+  const running = agents.filter(a => a.status === 'running')
+  const recent = agents.filter(a => a.status !== 'running' && a.lastActive > twoHoursAgo)
+  const older = agents.filter(a => a.status !== 'running' && a.lastActive <= twoHoursAgo)
+
+  // Separate cron and subagent in recent
+  const recentSubagents = recent.filter(a => a.type === 'subagent')
+  const recentCrons = recent.filter(a => a.type === 'cron' || a.type === 'cron-run')
 
   return (
     <div className="card full">
-      <div className="agent-command-header">
-        <div className="agent-command-title">AGENT COMMAND CENTER</div>
-        <div className="agent-command-stats">
-          <div className="agent-stat-item">
-            <span className="agent-stat-num" style={{ color: runningCount > 0 ? '#22c55e' : '#666' }}>{runningCount}</span>
-            <span className="agent-stat-txt">RUNNING</span>
+      {/* Header */}
+      <div className="acc-header">
+        <div className="acc-title">AGENT COMMAND CENTER</div>
+        <div className="acc-stats">
+          <div className="acc-stat">
+            <span className={`acc-stat-num ${stats.running > 0 ? 'acc-stat-active' : ''}`}>{stats.running || 0}</span>
+            <span className="acc-stat-label">RUNNING</span>
           </div>
-          <div className="agent-stat-item">
-            <span className="agent-stat-num">{agents.length}</span>
-            <span className="agent-stat-txt">TOTAL</span>
+          <div className="acc-stat">
+            <span className="acc-stat-num">{stats.completedToday || 0}</span>
+            <span className="acc-stat-label">TODAY</span>
           </div>
-          <div className="agent-stat-item">
-            <span className="agent-stat-num">{agents.length}</span>
-            <span className="agent-stat-txt">SESSIONS</span>
+          <div className="acc-stat">
+            <span className={`acc-stat-num ${costClass(stats.estimatedCost)}`}>{formatCost(stats.estimatedCost)}</span>
+            <span className="acc-stat-label">COST</span>
           </div>
         </div>
       </div>
 
-      <div className="agent-templates">
-        <div className="agent-templates-label">QUICK SPAWN</div>
-        <div className="agent-template-buttons">
-          {TASK_TEMPLATES.map(template => (
-            <button key={template.id} className="agent-template-btn" onClick={() => setSpawnModal({ open: true, template })}>{template.name}</button>
+      {/* Quick Spawn */}
+      <div className="acc-spawn">
+        <div className="acc-spawn-label">QUICK SPAWN</div>
+        <div className="acc-spawn-btns">
+          {TASK_TEMPLATES.map(t => (
+            <button key={t.id} className="agent-template-btn" onClick={() => setSpawnModal({ open: true, template: t })}>{t.name}</button>
           ))}
         </div>
       </div>
 
-      <AgentPipelineView agents={agents} onAgentClick={setSelectedAgent} />
-      <AgentHistoryLog agents={agents} />
+      {/* Running Agents */}
+      {running.length > 0 && (
+        <div className="acc-section">
+          <div className="acc-section-title">RUNNING ({running.length})</div>
+          {running.map(a => (
+            <AgentCard key={a.id} agent={a} onClick={setSelectedAgent} onKill={handleKill} />
+          ))}
+        </div>
+      )}
+
+      {/* Recent Sub-agents */}
+      {recentSubagents.length > 0 && (
+        <div className="acc-section">
+          <div className="acc-section-title">RECENT SUBAGENTS</div>
+          {recentSubagents.map(a => (
+            <AgentCard key={a.id} agent={a} onClick={setSelectedAgent} onKill={handleKill} compact />
+          ))}
+        </div>
+      )}
+
+      {/* Recent Crons */}
+      {recentCrons.length > 0 && (
+        <div className="acc-section">
+          <div className="acc-section-title">RECENT CRONS</div>
+          {recentCrons.map(a => (
+            <AgentCard key={a.id} agent={a} onClick={setSelectedAgent} onKill={handleKill} compact />
+          ))}
+        </div>
+      )}
+
+      {/* Activity Timeline */}
+      <ActivityTimeline timeline={timeline} />
+
+      {/* Show All */}
+      {older.length > 0 && (
+        <div className="acc-section">
+          <button className="acc-show-all-btn" onClick={() => setShowAll(!showAll)}>
+            {showAll ? 'HIDE' : `SHOW ALL (${older.length})`}
+          </button>
+          {showAll && (
+            <div className="acc-all-list">
+              {older.map(a => (
+                <div key={a.id} className="acc-all-item" onClick={() => setSelectedAgent(a.id)}>
+                  <TypeBadge type={a.type} />
+                  <span className="acc-all-name">{a.name}</span>
+                  {a.runCount > 0 && <span className="acc-run-count">ran {a.runCount}x</span>}
+                  <span className="acc-all-time">{formatElapsed(a.lastActive)}</span>
+                  <span className={costClass(a.cost)}>{formatCost(a.cost)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {agents.length === 0 && (
+        <div className="acc-empty">No agents found. Use Quick Spawn or chat to create one.</div>
+      )}
 
       <AgentSpawnModal
         isOpen={spawnModal.open}
         template={spawnModal.template}
         onClose={() => setSpawnModal({ open: false, template: null })}
-        onSpawn={handleSpawnAgent}
+        onSpawn={fetchAgents}
       />
     </div>
   )
