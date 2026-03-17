@@ -1046,38 +1046,76 @@ body::before {
 .lock-dot-error { border-color: var(--red); background: var(--red); box-shadow: none; }
 
 
-/* Unlock Animation */
-.unlock-anim { transition: opacity 0.4s ease, filter 0.4s ease; }
-.unlock-dissolve { opacity: 0; filter: blur(8px) brightness(2); }
-.unlock-icon-pulse { animation: unlock-pulse 0.5s ease; }
-@keyframes unlock-pulse {
-  0% { transform: scale(1); filter: drop-shadow(0 0 0px transparent); }
-  40% { transform: scale(1.15); filter: drop-shadow(0 0 12px rgba(34,197,94,0.6)); }
-  100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(34,197,94,0.3)); }
+/* ═══ UNLOCK ANIMATION ═══ */
+
+/* Phase: success — green flash on icon/dots */
+.unlock-icon-flash svg { animation: unlock-icon-pulse 0.2s ease-out; }
+@keyframes unlock-icon-pulse {
+  0% { filter: drop-shadow(0 0 0 transparent); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 16px rgba(34,197,94,0.8)); transform: scale(1.12); }
+  100% { filter: drop-shadow(0 0 6px rgba(34,197,94,0.4)); transform: scale(1); }
 }
-.unlock-auth-text {
-  font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #22c55e;
-  letter-spacing: 0.2em; opacity: 0; transform: translateY(4px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+.unlock-dots-flash .lock-dot { animation: unlock-dot-pulse 0.2s ease-out; }
+@keyframes unlock-dot-pulse {
+  0% { box-shadow: 0 0 0 transparent; }
+  50% { box-shadow: 0 0 12px rgba(34,197,94,0.8); background: #22c55e; border-color: #22c55e; }
+  100% { box-shadow: 0 0 4px rgba(34,197,94,0.3); }
 }
-.unlock-auth-visible { opacity: 1; transform: translateY(0); }
-.unlock-glitch-text { animation: unlock-glitch 0.35s steps(4) infinite; }
-@keyframes unlock-glitch {
-  0% { text-shadow: 2px 0 #22c55e, -2px 0 #ef4444; clip-path: inset(20% 0 30% 0); }
-  25% { text-shadow: -1px 0 #22c55e, 1px 0 #ef4444; clip-path: inset(50% 0 10% 0); }
-  50% { text-shadow: 1px 0 #22c55e, -1px 0 #ef4444; clip-path: inset(10% 0 60% 0); }
-  75% { text-shadow: -2px 0 #22c55e, 2px 0 #ef4444; clip-path: inset(40% 0 20% 0); }
-  100% { text-shadow: 0 0 #22c55e, 0 0 #ef4444; clip-path: inset(0 0 0 0); }
+.unlock-dot-green { background: #22c55e !important; border-color: #22c55e !important; }
+
+/* ACCESS GRANTED text */
+.unlock-grant-text {
+  font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700;
+  color: #22c55e; letter-spacing: 0.25em; opacity: 0; transform: translateY(6px);
+  transition: opacity 0.15s ease, transform 0.15s ease; margin-bottom: 1.5rem;
 }
-.unlock-scanline {
-  position: absolute; left: 0; right: 0; height: 2px;
-  background: rgba(34,197,94,0.15);
-  animation: unlock-scan 0.35s linear infinite;
+.unlock-grant-visible { opacity: 1; transform: translateY(0); }
+
+/* Phase: scramble — glitch text shadow */
+.unlock-phase-scramble .lock-title,
+.unlock-phase-scramble .lock-subtitle,
+.unlock-phase-scramble .unlock-grant-text {
+  animation: unlock-glitch-jitter 0.08s steps(2) infinite;
+}
+@keyframes unlock-glitch-jitter {
+  0% { text-shadow: 1px 0 rgba(255,255,255,0.3), -1px 0 rgba(255,255,255,0.15); }
+  50% { text-shadow: -1px 0 rgba(255,255,255,0.2), 2px 0 rgba(255,255,255,0.1); }
+  100% { text-shadow: 0 0 rgba(255,255,255,0.15), -2px 0 rgba(255,255,255,0.2); }
+}
+
+/* Scanline sweep during scramble */
+.unlock-scanline-sweep {
+  position: absolute; left: 0; right: 0; height: 3px; top: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  animation: unlock-scanline-move 0.6s linear infinite;
   pointer-events: none;
 }
-@keyframes unlock-scan {
+@keyframes unlock-scanline-move {
   0% { top: 0; }
   100% { top: 100%; }
+}
+
+/* Phase: CRT collapse */
+.unlock-phase-crt { animation: unlock-crt 0.55s cubic-bezier(0.4, 0, 1, 1) forwards; }
+@keyframes unlock-crt {
+  0% { transform: scaleY(1) scaleX(1); opacity: 1; filter: brightness(1); }
+  40% { transform: scaleY(0.01) scaleX(1.05); opacity: 1; filter: brightness(2.5); }
+  70% { transform: scaleY(0.01) scaleX(0.0); opacity: 0.8; filter: brightness(3); }
+  100% { transform: scaleY(0) scaleX(0); opacity: 0; filter: brightness(0); }
+}
+
+/* CRT afterglow line */
+.unlock-crt-collapse {
+  position: absolute; left: 5%; right: 5%; top: 50%; height: 2px;
+  background: rgba(255,255,255,0.6); transform: translateY(-50%);
+  animation: unlock-crt-line 0.55s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+@keyframes unlock-crt-line {
+  0% { opacity: 0; width: 0; left: 50%; }
+  30% { opacity: 1; width: 90%; left: 5%; }
+  70% { opacity: 0.8; width: 90%; left: 5%; }
+  100% { opacity: 0; width: 0; left: 50%; }
 }
 
 /* Decrypt */
