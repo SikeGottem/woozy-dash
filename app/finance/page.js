@@ -523,22 +523,30 @@ export default function FinancePage() {
 
               {/* Portfolio chart */}
               {(() => {
-                // Build portfolio total value per date from price_history
-                const dateMap = {}
+                // Build portfolio total value per date with carry-forward for missing dates
+                const allEntries = []
                 for (const h of holdings) {
                   const history = priceHistory[h.id] || []
                   for (const entry of history) {
-                    if (!dateMap[entry.date]) dateMap[entry.date] = 0
-                    dateMap[entry.date] += entry.value
+                    allEntries.push({ holdingId: h.id, date: entry.date, value: entry.value })
                   }
                 }
-                const portfolioHistory = Object.entries(dateMap).sort((a, b) => a[0].localeCompare(b[0])).map(([date, value]) => ({ date, price: value }))
+                allEntries.sort((a, b) => a.date.localeCompare(b.date))
+                const uniqueDates = [...new Set(allEntries.map(e => e.date))].sort()
+                const lastKnown = {}
+                const portfolioHistory = []
+                for (const date of uniqueDates) {
+                  const entries = allEntries.filter(e => e.date === date)
+                  for (const e of entries) lastKnown[e.holdingId] = e.value
+                  const total = Object.values(lastKnown).reduce((s, v) => s + v, 0)
+                  portfolioHistory.push({ date, price: total })
+                }
                 return portfolioHistory.length >= 2 ? (
                   <PriceChart
                     history={portfolioHistory}
-                    holdingName="TOTAL PORTFOLIO"
+                    holdingName=""
                     currentPrice={totalVal}
-                    costBasis={0}
+                    costBasis={totalCost}
                   />
                 ) : null
               })()}
