@@ -1045,6 +1045,17 @@ body::before {
 .lock-dot-filled { background: #fff; border-color: #fff; box-shadow: none; }
 .lock-dot-error { border-color: var(--red); background: var(--red); box-shadow: none; }
 
+/* Touch ID */
+.touchid-screen { cursor: default; }
+.touchid-icon { margin-bottom: 1.5rem; animation: lock-float 3s ease-in-out infinite; }
+.touchid-btn { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #fff; background: transparent; border: 1px solid #333; padding: 0.6rem 1.8rem; cursor: pointer; letter-spacing: 0.08em; transition: background 0.15s; }
+.touchid-btn:hover { background: #111; }
+.touchid-btn:disabled { opacity: 0.4; cursor: default; }
+.touchid-fallback { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #555; margin-top: 1.25rem; cursor: pointer; transition: color 0.15s; }
+.touchid-fallback:hover { color: #999; }
+.touchid-fade-in { animation: touchid-fadein 0.4s ease; }
+@keyframes touchid-fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
 /* Decrypt */
 .decrypt { opacity: 0; transform: translateY(10px); filter: blur(4px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
 .decrypted { opacity: 1; transform: translateY(0); filter: blur(0); }
