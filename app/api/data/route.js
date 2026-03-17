@@ -176,21 +176,40 @@ function getFinanceFromDB(db) {
     ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END, p.updated_at DESC
   `).all()
 
+  // Load live holdings data
+  let holdings = []
+  try {
+    holdings = db.prepare('SELECT * FROM holdings').all()
+  } catch {}
+
+  // Use live prices for investments if available
+  const hndqHolding = holdings.find(h => h.name === 'HNDQ')
+  const goldHolding = holdings.find(h => h.name === 'Gold')
+  const liveInvested = (hndqHolding?.current_value || byName['Investments'] || 0) 
+                     + (goldHolding?.current_value || byName['Gold'] || 0)
+  const liveNetWorth = liquid + liveInvested + receivables
+
   // Build legacy assets shape for backward compat
   const assets = {
     checking: byName['Checking'] || 0,
     savings: byName['Savings'] || 0,
     cash: byName['Cash'] || 0,
-    investments: byName['Investments'] || 0,
-    gold: { grams: 20, value: byName['Gold'] || 0 },
+    investments: hndqHolding?.current_value || byName['Investments'] || 0,
+    gold: { grams: 20, value: goldHolding?.current_value || byName['Gold'] || 0 },
     receivables,
-    netWorth
+    netWorth: liveNetWorth
   }
 
   return {
     accounts,
+    holdings: holdings.map(h => ({
+      ...h,
+      gain: h.current_value && h.cost_basis ? Math.round((h.current_value - h.cost_basis) * 100) / 100 : 0,
+      gainPct: h.current_value && h.cost_basis > 0 ? Math.round(((h.current_value - h.cost_basis) / h.cost_basis) * 10000) / 100 : 0
+    })),
     transactions: transactions.map(tr => ({
       ...formatTransaction(tr),
+      project_name: tr.project_name,
       account_name: tr.account_name,
       tags: tr.tags,
       recurring: tr.recurring,
@@ -202,7 +221,7 @@ function getFinanceFromDB(db) {
       total_paid: p.total_paid,
       total_pending: p.total_pending,
     })),
-    summary: { netWorth, liquid, invested, receivables, monthlyIncome, monthlyExpenses },
+    summary: { netWorth: liveNetWorth, liquid, invested: liveInvested, receivables, monthlyIncome, monthlyExpenses },
     assets // legacy compat
   }
 }

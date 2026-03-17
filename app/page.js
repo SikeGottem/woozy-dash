@@ -217,12 +217,7 @@ export default function Home() {
           </ErrorBoundary>
         )}
 
-        {/* === SECTION 4: FREELANCE === */}
-        {contextMode === 'work' && (
-          <ErrorBoundary name="Freelance">
-            <FreelanceModule data={data} unlocked={unlocked} />
-          </ErrorBoundary>
-        )}
+        {/* Freelance pipeline is now integrated into FinanceModule */}
       </div>
 
       <div className="last-updated">

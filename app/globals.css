@@ -878,6 +878,46 @@ body::before {
 /* ETF */
 .etf-status { margin-top: 1.5rem; padding: 0.75rem; background: #0f0f0f; border: 1px solid #222; border-radius: 0; font-size: 0.8rem; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
 
+/* Finance Stats Row */
+.fin-stats-row { display: flex; flex-wrap: wrap; gap: 1.5rem 2rem; }
+
+/* Finance Transaction Table */
+.fin-tx-table { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+.fin-tx-header { display: grid; grid-template-columns: 90px 1fr 90px 100px 80px 80px; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid #222; color: #555; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.05em; }
+.fin-tx-row { display: grid; grid-template-columns: 90px 1fr 90px 100px 80px 80px; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid #111; align-items: center; }
+.fin-tx-pending { opacity: 0.6; }
+.fin-tx-date { color: #555; font-size: 0.75rem; }
+.fin-tx-desc { color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fin-tx-cat { color: #555; font-size: 0.7rem; text-transform: uppercase; }
+.fin-tx-acct { color: #555; font-size: 0.7rem; }
+@media (max-width: 768px) {
+  .fin-tx-header, .fin-tx-row { grid-template-columns: 70px 1fr 80px 70px; }
+  .fin-tx-header span:nth-child(5), .fin-tx-header span:nth-child(6),
+  .fin-tx-row span:nth-child(5), .fin-tx-row span:nth-child(6) { display: none; }
+}
+
+/* Income vs Expense Bars */
+.ie-bars { display: flex; align-items: flex-end; gap: 1rem; padding: 1rem 0; position: relative; }
+.ie-month { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; flex: 1; }
+.ie-col { display: flex; gap: 2px; align-items: flex-end; height: 80px; }
+.ie-bar { width: 14px; border-radius: 0; transition: height 0.6s ease; min-height: 1px; }
+.ie-bar-income { background: #22c55e; }
+.ie-bar-expense { background: #ef4444; }
+.ie-label { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: #555; text-transform: uppercase; }
+.ie-legend { position: absolute; top: 0; right: 0; display: flex; gap: 0.75rem; }
+
+/* Net Worth Line */
+.nw-line-chart { max-height: 120px; }
+
+/* Pipeline */
+.fin-pipeline { display: flex; flex-direction: column; gap: 1rem; }
+.fin-pipeline-item { padding: 0.75rem; border: 1px solid #1a1a1a; }
+.fin-pipeline-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.fin-pipeline-name { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 600; color: #fff; }
+.fin-pipeline-bar-track { height: 6px; background: #111; width: 100%; margin-bottom: 0.4rem; }
+.fin-pipeline-bar-fill { height: 100%; background: #22c55e; transition: width 0.8s ease; }
+.fin-pipeline-nums { display: flex; gap: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+
 /* Empty */
 .empty-state { color: var(--dim); font-style: italic; text-align: center; padding: 1rem; font-size: 0.85rem; }
 .empty-visual { text-align: center; padding: 2rem 1rem; color: var(--dim); }
