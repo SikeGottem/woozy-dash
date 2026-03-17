@@ -153,7 +153,7 @@ body::before {
 /* DO NEXT Hero Card */
 .do-next-hero {
   background: rgba(34,197,94,0.05);
-  border: 1px solid #222; border-left: 3px solid #22c55e; border-radius: 0; padding: 16px;
+  border: 1px solid #222; border-radius: 0; padding: 16px;
   margin-bottom: 2rem; position: relative; overflow: hidden;
   box-shadow: none;
   cursor: pointer; transition: all 0.2s ease;
@@ -166,7 +166,6 @@ body::before {
 
 .do-next-hero:hover {
   background: rgba(34,197,94,0.08); border-color: #333;
-  border-left-color: #22c55e;
 }
 
 .do-next-header {
@@ -358,7 +357,7 @@ body::before {
 /* Pinned Project */
 .pinned-project {
   background: #111;
-  border: 1px solid #222; border-left: 3px solid #10b981; border-radius: 0; padding: 16px;
+  border: 1px solid #222; border-radius: 0; padding: 16px;
   position: relative; margin-bottom: 2rem; overflow: hidden;
   box-shadow: none;
 }
@@ -540,7 +539,7 @@ body::before {
 
 .project-task.task-active::before {
   content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 4px; height: 60%; background: #10b981; border-radius: 0;
+  width: 4px; height: 60%; background: #222; border-radius: 0;
 }
 
 .task-active-indicator {
@@ -1057,8 +1056,30 @@ body::before {
 .chat-fab { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 56px; height: 56px; border-radius: 0; background: #111; border: 1px solid #222; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: none; transition: all 0.2s; }
 .chat-fab:hover { border-color: #fff; color: #fff; }
 .chat-fab-icon { font-size: 1.4rem; }
-.chat-panel { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 400px; max-width: calc(100vw - 2rem); height: 500px; max-height: calc(100vh - 3rem); background: #0a0a0a; border: 1px solid #222; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; overflow: hidden; animation: chat-slide-in 0.2s ease-out; }
-@keyframes chat-slide-in { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.chat-panel { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100; width: 400px; max-width: calc(100vw - 2rem); height: 500px; max-height: calc(100vh - 3rem); background: #0a0a0a; border: 1px solid #222; border-radius: 0; display: flex; flex-direction: column; box-shadow: none; overflow: hidden; animation: chat-wipe-up 300ms ease-out; }
+.chat-panel.closing { animation: chat-wipe-down 300ms ease-in; }
+
+@keyframes chat-wipe-up { 
+  from { 
+    opacity: 0; 
+    transform: translateY(100%); 
+  } 
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  } 
+}
+
+@keyframes chat-wipe-down { 
+  from { 
+    opacity: 1; 
+    transform: translateY(0); 
+  } 
+  to { 
+    opacity: 0; 
+    transform: translateY(100%); 
+  } 
+}
 .chat-header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #1a1a1a; }
 .chat-header-title { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 600; color: #fff; letter-spacing: 0.1em; }
 .chat-close, .chat-clear { background: none; border: none; color: #666; font-size: 1rem; cursor: pointer; padding: 0.25rem; }
@@ -2055,21 +2076,6 @@ body[data-focus-mode="true"] .section-freelance:hover {
 }
 
 /* Context Mode Styling */
-body[data-context-mode="uni"] .section-today {
-  border-left: 3px solid #3b82f6;
-}
-
-body[data-context-mode="work"] .section-today {
-  border-left: 3px solid #ef4444;
-}
-
-body[data-context-mode="personal"] .section-today {
-  border-left: 3px solid #22c55e;
-}
-
-body[data-context-mode="deep"] .section-today {
-  border-left: 3px solid #8b5cf6;
-}
 
 /* Context mode section visibility */
 body[data-context-mode="uni"] .section-freelance,
