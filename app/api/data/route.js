@@ -265,10 +265,14 @@ function nestSubtasks(tasks, subtasks, projects) {
 }
 
 function getTaskCounts(db, category = null) {
-  const where = category ? `WHERE category = '${category}'` : ''
-  return db.prepare(`
-    SELECT status, COUNT(*) as count FROM tasks ${where} GROUP BY status
-  `).all().reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
+  if (category) {
+    return db.prepare(
+      'SELECT status, COUNT(*) as count FROM tasks WHERE category = ? GROUP BY status'
+    ).all(category).reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
+  }
+  return db.prepare(
+    'SELECT status, COUNT(*) as count FROM tasks GROUP BY status'
+  ).all().reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
 }
 
 function getUniData(db) {
