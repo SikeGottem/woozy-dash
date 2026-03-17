@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-const dbPath = '/Users/ethanwu/.openclaw/workspace/woozy.db'
+const dbPath = process.env.WOOZY_DB_PATH || join(process.env.HOME, '.openclaw', 'workspace', 'woozy.db')
 
 function getDatabase() {
   return new Database(dbPath, { readonly: true })
