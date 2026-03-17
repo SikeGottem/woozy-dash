@@ -7,7 +7,6 @@ import TasksModule from './components/TasksModule'
 import AgentsModule from './components/AgentsModule'
 import FinanceModule from './components/FinanceModule'
 import FreelanceModule from './components/FreelanceModule'
-import ChatPanel from './components/ChatPanel'
 import ErrorBoundary from './components/ui/ErrorBoundary'
 import { NotificationProvider } from './context/NotificationContext'
 import ToastNotifications from './components/notifications/ToastNotifications'
@@ -225,10 +224,6 @@ export default function Home() {
       </div>
       
       <CaptureModal isOpen={captureOpen} onClose={() => setCaptureOpen(false)} />
-      
-      <ErrorBoundary name="Chat">
-        <ChatPanel />
-      </ErrorBoundary>
     </NotificationProvider>
   )
 }

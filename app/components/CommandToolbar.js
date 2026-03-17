@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import NotificationCenter from './notifications/NotificationCenter'
 
 export default function CommandToolbar({ 
@@ -21,6 +23,9 @@ export default function CommandToolbar({
   data,
   onViewTranscript
 }) {
+  const pathname = usePathname()
+  const router = useRouter()
+  const isFinancePage = pathname === '/finance'
   const [currentTime, setCurrentTime] = useState(new Date())
   const [stateLoaded, setStateLoaded] = useState(false)
   const [pomodorosToday, setPomodorosToday] = useState(0)
@@ -206,7 +211,11 @@ export default function CommandToolbar({
     const handler = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return
       
-      if (e.key.toLowerCase() === 'f') {
+      if (e.key === '$' || (e.shiftKey && e.key === 'F')) {
+        e.preventDefault()
+        router.push(isFinancePage ? '/' : '/finance')
+        return
+      } else if (e.key.toLowerCase() === 'f' && !e.shiftKey) {
         e.preventDefault()
         toggleFocusMode()
       } else if (e.key.toLowerCase() === 't') {
@@ -417,6 +426,15 @@ export default function CommandToolbar({
           >
             <span className="btn-content">E {energyDots}</span>
           </button>
+
+          <Link 
+            href={isFinancePage ? '/' : '/finance'}
+            className={`hud-btn ${isFinancePage ? 'hud-btn-active' : ''}`}
+            title={isFinancePage ? 'Back to dashboard [$]' : 'Finance [$]'}
+            style={{ textDecoration: 'none' }}
+          >
+            <span className="btn-content">{isFinancePage ? '⌂' : '$'}</span>
+          </Link>
         </div>
       </div>
 

@@ -150,9 +150,17 @@ function isAgentAnnouncement(msg) {
 }
 
 // === CHAT PANEL ===
-export default function ChatPanel() {
+export default function ChatPanel({ externalOpen, onExternalToggle }) {
   const [open, setOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+
+  // Sync with external open state from layout
+  useEffect(() => {
+    if (externalOpen !== undefined && externalOpen !== open) {
+      if (externalOpen) setOpen(true)
+      else handleToggle()
+    }
+  }, [externalOpen])
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -165,16 +173,15 @@ export default function ChatPanel() {
 
   const handleToggle = () => {
     if (open) {
-      // Start closing animation
       setIsClosing(true)
-      // Wait for animation to complete before unmounting
       setTimeout(() => {
         setOpen(false)
         setIsClosing(false)
+        if (onExternalToggle) onExternalToggle(false)
       }, 300)
     } else {
-      // Open immediately - animation will be handled by CSS
       setOpen(true)
+      if (onExternalToggle) onExternalToggle(true)
     }
   }
 

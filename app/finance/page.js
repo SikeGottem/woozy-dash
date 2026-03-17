@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PinLock, DecryptReveal } from '../components/ui/PinLock'
+import CommandToolbar from '../components/CommandToolbar'
+import { NotificationProvider } from '../context/NotificationContext'
 import Link from 'next/link'
 
 const fmt = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(n)
@@ -219,6 +221,15 @@ export default function FinancePage() {
   const [liveHoldings, setLiveHoldings] = useState(null)
   const [selectedHolding, setSelectedHolding] = useState(null)
   const [txFilter, setTxFilter] = useState('all')
+  
+  // Toolbar state (minimal for finance page)
+  const [focusMode, setFocusMode] = useState(false)
+  const [contextMode, setContextMode] = useState('personal')
+  const [energy, setEnergy] = useState(3)
+  const [timer, setTimer] = useState(null)
+  const [timerSeconds, setTimerSeconds] = useState(0)
+  const [currentTask, setCurrentTask] = useState('Finance review')
+  const [captureOpen, setCaptureOpen] = useState(false)
 
   useEffect(() => {
     const was = sessionStorage.getItem('woozy-unlocked') === 'true'
@@ -236,21 +247,37 @@ export default function FinancePage() {
     sessionStorage.setItem('woozy-unlocked', 'true')
   }, [])
 
+  const toolbarProps = {
+    onCapture: () => setCaptureOpen(true),
+    unlocked,
+    onLock: () => { setUnlocked(false); sessionStorage.removeItem('woozy-unlocked') },
+    focusMode, setFocusMode,
+    contextMode, setContextMode,
+    energy, setEnergy,
+    timer, setTimer,
+    timerSeconds, setTimerSeconds,
+    currentTask, setCurrentTask,
+  }
+
   if (!unlocked) {
     return (
-      <div style={{maxWidth:'1400px',margin:'0 auto',padding:'2rem'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'2rem'}}>
-          <div style={{fontFamily:'JetBrains Mono',fontSize:'0.75rem',color:'#666',letterSpacing:'0.15em'}}>
-            ── FINANCE ──
-          </div>
-          <Link href="/" style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'#555',textDecoration:'none'}}>← DASHBOARD</Link>
+      <NotificationProvider>
+        <div style={{maxWidth:'1400px',margin:'0 auto',padding:'2rem'}}>
+          <CommandToolbar {...toolbarProps} />
+          <div className="card full"><PinLock onUnlock={handleUnlock} /></div>
         </div>
-        <div className="card full"><PinLock onUnlock={handleUnlock} /></div>
-      </div>
+      </NotificationProvider>
     )
   }
 
-  if (!data) return <div className="loading">LOADING FINANCIAL DATA...</div>
+  if (!data) return (
+    <NotificationProvider>
+      <div style={{maxWidth:'1400px',margin:'0 auto',padding:'1.5rem'}}>
+        <CommandToolbar {...toolbarProps} />
+        <div className="loading" style={{height:'50vh'}}>LOADING FINANCIAL DATA...</div>
+      </div>
+    </NotificationProvider>
+  )
 
   const { accounts, holdings: dbHoldings, transactions, netWorthHistory, priceHistory, goals, freelanceProjects, summary } = data
   const holdings = liveHoldings || dbHoldings
@@ -291,12 +318,9 @@ export default function FinancePage() {
     : summary.monthlyIncome === 0 && summary.monthlyExpenses === 0 ? '—' : '0'
 
   return (
+    <NotificationProvider>
     <div style={{maxWidth:'1400px',margin:'0 auto',padding:'1.5rem',fontFamily:'JetBrains Mono, monospace'}}>
-      {/* NAV */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.5rem'}}>
-        <Link href="/" style={{fontFamily:'JetBrains Mono',fontSize:'0.7rem',color:'#555',textDecoration:'none',border:'1px solid #222',padding:'0.3rem 0.6rem'}}>← DASHBOARD</Link>
-        <div style={{fontSize:'0.65rem',color:'#333'}}>WOOZY FINANCE</div>
-      </div>
+      <CommandToolbar {...toolbarProps} />
 
       {/* NET WORTH HERO */}
       <div className="card full" style={{marginBottom:'1.5rem'}}>
@@ -558,5 +582,6 @@ export default function FinancePage() {
         WOOZY FINANCE · LAST UPDATE {new Date(data.updated).toLocaleString('en-AU', {hour:'2-digit',minute:'2-digit',hour12:false})}
       </div>
     </div>
+    </NotificationProvider>
   )
 }
