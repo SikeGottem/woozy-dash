@@ -9,12 +9,25 @@ export const ChatContext = createContext({ toggleChat: () => {} })
 export function useChatContext() { return useContext(ChatContext) }
 
 export default function RootLayout({ children }) {
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
   const [chatOpen, setChatOpen] = useState(false)
   const toggleChat = useCallback(() => setChatOpen(prev => !prev), [])
 
   return (
     <html lang="en">
-      <head><title>Woozy</title></head>
+      <head>
+        <title>Woozy</title>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0a0a0a" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+      </head>
       <body>
         <ChatContext.Provider value={{ chatOpen, setChatOpen, toggleChat }}>
           {children}

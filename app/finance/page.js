@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { ChevronDown, ChevronRight, TrendingUp, TrendingDown, Check, ArrowRight as FinArrowRight } from 'lucide-react'
 import { PinLock, DecryptReveal } from '../components/ui/PinLock'
-import CommandToolbar from '../components/CommandToolbar'
+import NavBar from '../components/NavBar'
 import { NotificationProvider } from '../context/NotificationContext'
 
 const fmt = (n) => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
@@ -312,14 +313,8 @@ export default function FinancePage() {
   const [txFilter, setTxFilter] = useState('all')
   const [lastUpdated, setLastUpdated] = useState(null)
 
-  // Toolbar state
-  const [focusMode, setFocusMode] = useState(false)
-  const [contextMode, setContextMode] = useState('personal')
-  const [energy, setEnergy] = useState(3)
-  const [timer, setTimer] = useState(null)
-  const [timerSeconds, setTimerSeconds] = useState(0)
-  const [currentTask, setCurrentTask] = useState('Finance review')
-  const [captureOpen, setCaptureOpen] = useState(false)
+  
+  // Toolbar state removed - using NavBar instead
 
   const fetchAll = useCallback(() => {
     fetch('/api/finance').then(r => r.json()).then(d => { setData(d); setLastUpdated(Date.now()) }).catch(() => {})
@@ -354,11 +349,7 @@ export default function FinancePage() {
     return () => { clearInterval(dataInterval); if (priceInterval) clearInterval(priceInterval); clearInterval(marketCheck) }
   }, [unlocked, fetchAll, isMarketHours])
 
-  const toolbarProps = {
-    onCapture: () => setCaptureOpen(true), unlocked, onLock: () => setUnlocked(false),
-    focusMode, setFocusMode, contextMode, setContextMode, energy, setEnergy,
-    timer, setTimer, timerSeconds, setTimerSeconds, currentTask, setCurrentTask,
-  }
+  // toolbarProps removed - using NavBar instead
 
   if (!unlocked) return (
     <NotificationProvider>
@@ -371,7 +362,7 @@ export default function FinancePage() {
   if (!data) return (
     <NotificationProvider>
       <div style={{maxWidth:'1400px',margin:'0 auto',padding:'1.5rem'}}>
-        <CommandToolbar {...toolbarProps} />
+        <NavBar />
         <div className="loading" style={{height:'50vh'}}>LOADING FINANCIAL DATA...</div>
       </div>
     </NotificationProvider>
@@ -440,7 +431,7 @@ export default function FinancePage() {
     <NotificationProvider>
     <DecryptReveal unlocked={unlocked}>
     <div style={{maxWidth:'1100px',margin:'0 auto',padding:'1.5rem',fontFamily:'JetBrains Mono, monospace'}}>
-      <CommandToolbar {...toolbarProps} />
+      <NavBar />
 
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'0.5rem'}}>
         <LiveIndicator lastUpdated={lastUpdated} />
@@ -749,7 +740,7 @@ export default function FinancePage() {
                   <span style={{color: isUp ? '#22c55e' : '#ef4444',fontWeight:600}}>
                     {isUp ? '+' : ''}{fmtFull(gain)} ({isUp ? '+' : ''}{gainPct}%)
                   </span>
-                  <span style={{color:'#555',fontSize:'0.85rem'}}>{isExpanded ? '▾' : '▸'}</span>
+                  <span style={{color:'#555',fontSize:'0.85rem'}}>{isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
                 </div>
               </div>
               {isExpanded && (
@@ -807,7 +798,7 @@ export default function FinancePage() {
               <div style={{fontSize:'0.6rem',color:'#555',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'0.25rem'}}>{displayName}</div>
               <div style={{fontSize:'1rem',fontWeight:700,color:'#fff'}}>{fmt(liveVal)}</div>
               {a.institution && <div style={{fontSize:'0.55rem',color:'#333'}}>{a.institution}</div>}
-              {holding && <div style={{fontSize:'0.65rem',color: hUp ? '#22c55e' : '#ef4444',marginTop:'0.2rem'}}>{hUp ? '+' : ''}{hGain.toFixed(1)}% {hUp ? '▲' : '▼'}</div>}
+              {holding && <div style={{fontSize:'0.65rem',color: hUp ? '#22c55e' : '#ef4444',marginTop:'0.2rem'}}>{hUp ? '+' : ''}{hGain.toFixed(1)}% {hUp ? <TrendingUp size={11} style={{ verticalAlign: 'middle' }} /> : <TrendingDown size={11} style={{ verticalAlign: 'middle' }} />}</div>}
             </div>
           )
         })}
@@ -876,7 +867,7 @@ export default function FinancePage() {
                 <span className={isIncome ? 'money-positive' : 'money-negative'}>{isIncome ? '+' : '-'}{fmt(tr.amount)}</span>
                 <span className="fin-tx-acct">{tr.account_name || '—'}</span>
                 <span style={{fontFamily:'JetBrains Mono',fontSize:'0.65rem',color: tr.status === 'paid' ? '#d97706' : ['completed','cleared'].includes(tr.status) ? '#ccc' : tr.status === 'pending' ? '#d97706' : '#555'}}>
-                  {tr.status === 'paid' ? 'PAID · awaiting' : ['completed','cleared'].includes(tr.status) ? 'CLEARED ✓' : tr.status.toUpperCase()}
+                  {tr.status === 'paid' ? 'PAID · awaiting' : ['completed','cleared'].includes(tr.status) ? <>CLEARED <Check size={10} style={{ verticalAlign: 'middle' }} /></> : tr.status.toUpperCase()}
                 </span>
               </div>
             )

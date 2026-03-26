@@ -1,4 +1,5 @@
 'use client'
+import { Circle, Check } from 'lucide-react'
 
 export default function HabitsModule({ habits }) {
   if (!habits || habits.length === 0) return null
@@ -10,7 +11,7 @@ export default function HabitsModule({ habits }) {
         {habits.map((h, i) => (
           <li key={i} className="data-item">
             <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-              <span>{h.icon || '●'}</span>
+              <span>{h.icon || <Circle size={10} fill="currentColor" />}</span>
               <span>{h.name}</span>
             </div>
             <span style={{
@@ -18,7 +19,7 @@ export default function HabitsModule({ habits }) {
               fontFamily: "'JetBrains Mono', monospace",
               fontSize: '0.8rem'
             }}>
-              {h.today_completed ? '✓ DONE' : '○'}
+              {h.today_completed ? <><Check size={12} style={{ verticalAlign: 'middle' }} /> DONE</> : <Circle size={10} />}
             </span>
           </li>
         ))}

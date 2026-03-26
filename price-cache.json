@@ -1,7 +1,29 @@
 {
-  "hndq": 48.46,
-  "goldPerGram": 229.38,
-  "audRate": 1.42657896,
-  "fetchedAt": 1773745180526,
-  "errors": []
+  "prices": {
+    "HNDQ": 47.46,
+    "RBTZ": 13.99,
+    "ERTH": 10.18,
+    "VGS": 143.06,
+    "ASIA": 15.23,
+    "NDQ": 51.22,
+    "VGE": 85.94,
+    "IVV": 63.2,
+    "CURE": 60.14
+  },
+  "goldPerGram": 208.61,
+  "audRate": 1.43261332,
+  "fetchedAt": 1774487823162,
+  "errors": [
+    "HNDQ: fetch failed",
+    "RBTZ: fetch failed",
+    "ERTH: fetch failed",
+    "VGS: fetch failed",
+    "ASIA: fetch failed",
+    "NDQ: fetch failed",
+    "VGE: fetch failed",
+    "IVV: fetch failed",
+    "CURE: fetch failed",
+    "Gold: fetch failed"
+  ],
+  "hndq": 47.46
 }

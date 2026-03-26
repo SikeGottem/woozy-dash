@@ -1,401 +1,220 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { CheckCircle, Command, X, Paperclip } from 'lucide-react'
+import { 
+  formatRelativeTime, 
+  truncateText, 
+  uploadFile,
+  RichContent,
+  AttachmentPreview,
+  ImageComponent,
+  AudioComponent,
+  FileCard
+} from './chat/shared'
 
-// === CODE BLOCK WITH COPY ===
-function CodeBlock({ content }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    navigator.clipboard.writeText(content).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
+// Shared components are imported from ./chat/shared.js
+
+// Shared utilities and components are imported from ./chat/shared.js
+
+function getMessageSummary(content) {
+  if (!content || content.length <= 200) return null
+  
+  // Try to extract first sentence
+  const firstSentence = content.match(/^[^.!?]*[.!?]/)?.[0]
+  if (firstSentence && firstSentence.length < 100) {
+    return firstSentence.trim()
   }
-  return (
-    <div className="chat-code-block-wrapper">
-      <button className="chat-code-copy" onClick={handleCopy}>{copied ? 'copied' : 'copy'}</button>
-      <pre className="chat-code-block"><code>{content}</code></pre>
-    </div>
-  )
+  
+  // Fall back to first 100 chars + ellipsis
+  const words = content.split(' ')
+  let summary = ''
+  for (const word of words) {
+    if (summary.length + word.length > 100) break
+    summary += (summary ? ' ' : '') + word
+  }
+  return summary + '...'
 }
 
-// === IMAGE LIGHTBOX ===
-function Lightbox({ src, alt, onClose }) {
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+// === CONVERSATION ITEM ===
+function ConversationItem({ conversation, isActive, onClick, onClose }) {
+  const { id, name, status, lastMessage, unreadCount, lastActiveTime } = conversation
+  
+  const statusDot = status === 'running' ? 'chat-conv-status-running' : 'chat-conv-status-complete'
+  const timeStr = formatRelativeTime(lastActiveTime || Date.now())
+  
   return (
-    <div className="chat-lightbox" onClick={onClose}>
-      <img src={src} alt={alt || ''} className="chat-lightbox-img" onClick={e => e.stopPropagation()} />
-      <button className="chat-lightbox-close" onClick={onClose}>✕</button>
-    </div>
-  )
-}
-
-// === CHAT IMAGE ===
-function ChatImage({ src, alt }) {
-  const [lightbox, setLightbox] = useState(false)
-  return (
-    <>
-      <div className="chat-image-container" onClick={() => setLightbox(true)}>
-        <img src={src} alt={alt || ''} className="chat-image" loading="lazy" />
+    <div 
+      className={`chat-conv-item ${isActive ? 'chat-conv-active' : ''}`}
+      onClick={onClick}
+    >
+      <div className="chat-conv-header">
+        <div className="chat-conv-name">
+          {id === 'main' && <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ marginRight: 4, verticalAlign: 'middle' }}><circle cx="8" cy="8" r="7.5" stroke="white" strokeWidth="1"/><circle cx="8" cy="8" r="3" fill="white"/></svg> </>}
+          {name}
+        </div>
+        {id !== 'main' && (
+          <button 
+            className="chat-conv-close"
+            onClick={(e) => { e.stopPropagation(); onClose(id) }}
+          >
+            <X size={12} />
+          </button>
+        )}
       </div>
-      {lightbox && <Lightbox src={src} alt={alt} onClose={() => setLightbox(false)} />}
-    </>
-  )
-}
-
-// === AUDIO PLAYER ===
-function ChatAudio({ src }) {
-  return (
-    <div className="chat-audio-container">
-      <audio controls src={src} className="chat-audio" preload="metadata" />
+      
+      <div className="chat-conv-meta">
+        <div className={`chat-conv-status-dot ${statusDot}`} />
+        <div className="chat-conv-preview">
+          {lastMessage ? truncateText(lastMessage, 40) : 'No messages'}
+        </div>
+      </div>
+      
+      <div className="chat-conv-bottom">
+        <div className="chat-conv-time">{timeStr}</div>
+        {unreadCount > 0 && (
+          <div className="chat-conv-unread">{unreadCount}</div>
+        )}
+      </div>
     </div>
   )
 }
 
-// === FILE CARD ===
-function FileCard({ filename, size, url }) {
-  const formatSize = (bytes) => {
-    if (bytes < 1024) return `${bytes}B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
-  }
-  return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="chat-file-card">
-      <span className="chat-file-icon">📄</span>
-      <span className="chat-file-info">
-        <span className="chat-file-name">{filename}</span>
-        {size && <span className="chat-file-size">{formatSize(size)}</span>}
-      </span>
-    </a>
-  )
-}
-
-// === MEDIA DETECTION HELPERS ===
-const IMAGE_EXT_RE = /\.(jpg|jpeg|png|gif|webp|svg)(\?[^\s]*)?$/i
-const AUDIO_EXT_RE = /\.(mp3|wav|ogg|m4a|aac)(\?[^\s]*)?$/i
-const MEDIA_LINE_RE = /^MEDIA:\s*(.+)$/gm
-const MD_IMAGE_RE = /!\[([^\]]*)\]\(([^)]+)\)/g
-const RAW_URL_RE = /(?:^|\s)(https?:\/\/[^\s]+)/g
-const UPLOAD_PATH_RE = /\/uploads\/[^\s]+/g
-
-function extractMediaElements(text) {
-  const elements = []
-  const processedRanges = []
-
-  // Extract MEDIA: lines
-  let match
-  while ((match = MEDIA_LINE_RE.exec(text)) !== null) {
-    const path = match[1].trim()
-    if (IMAGE_EXT_RE.test(path) || path.startsWith('data:image/')) {
-      elements.push({ type: 'image', src: path, start: match.index, end: match.index + match[0].length })
-    } else if (AUDIO_EXT_RE.test(path)) {
-      elements.push({ type: 'audio', src: path, start: match.index, end: match.index + match[0].length })
-    }
-    processedRanges.push([match.index, match.index + match[0].length])
-  }
-
-  // Extract markdown images
-  MD_IMAGE_RE.lastIndex = 0
-  while ((match = MD_IMAGE_RE.exec(text)) !== null) {
-    if (!isInRange(match.index, processedRanges)) {
-      elements.push({ type: 'image', src: match[2], alt: match[1], start: match.index, end: match.index + match[0].length })
-      processedRanges.push([match.index, match.index + match[0].length])
-    }
-  }
-
-  // Extract raw image/audio URLs
-  RAW_URL_RE.lastIndex = 0
-  while ((match = RAW_URL_RE.exec(text)) !== null) {
-    const url = match[1]
-    if (!isInRange(match.index, processedRanges)) {
-      if (IMAGE_EXT_RE.test(url)) {
-        elements.push({ type: 'image', src: url, start: match.index, end: match.index + match[0].length })
-        processedRanges.push([match.index, match.index + match[0].length])
-      } else if (AUDIO_EXT_RE.test(url)) {
-        elements.push({ type: 'audio', src: url, start: match.index, end: match.index + match[0].length })
-        processedRanges.push([match.index, match.index + match[0].length])
-      }
-    }
-  }
-
-  // Extract /uploads/ paths
-  UPLOAD_PATH_RE.lastIndex = 0
-  while ((match = UPLOAD_PATH_RE.exec(text)) !== null) {
-    if (!isInRange(match.index, processedRanges)) {
-      const path = match[0]
-      if (IMAGE_EXT_RE.test(path)) {
-        elements.push({ type: 'image', src: path, start: match.index, end: match.index + match[0].length })
-      } else if (AUDIO_EXT_RE.test(path)) {
-        elements.push({ type: 'audio', src: path, start: match.index, end: match.index + match[0].length })
-      } else {
-        elements.push({ type: 'file', url: path, filename: path.split('/').pop(), start: match.index, end: match.index + match[0].length })
-      }
-      processedRanges.push([match.index, match.index + match[0].length])
-    }
-  }
-
-  return elements
-}
-
-function isInRange(index, ranges) {
-  return ranges.some(([start, end]) => index >= start && index < end)
-}
-
-function stripMediaFromText(text, elements) {
-  let result = text
-  // Remove media references from text (process in reverse to preserve indices)
-  const sorted = [...elements].sort((a, b) => b.start - a.start)
-  for (const el of sorted) {
-    result = result.slice(0, el.start) + result.slice(el.end)
-  }
-  return result.trim()
-}
-
-// === MARKDOWN RENDERER ===
-function MarkdownRenderer({ content }) {
-  const parseMarkdown = (text) => {
-    const lines = text.split('\n')
-    const elements = []
-    let inCodeBlock = false
-    let currentCodeBlock = []
-    let currentList = []
-
-    const flushCodeBlock = () => {
-      if (currentCodeBlock.length > 0) {
-        elements.push({ type: 'code-block', content: currentCodeBlock.join('\n'), key: `code-${elements.length}` })
-        currentCodeBlock = []
-      }
-    }
-
-    const flushList = () => {
-      if (currentList.length > 0) {
-        elements.push({ type: 'list', items: currentList, key: `list-${elements.length}` })
-        currentList = []
-      }
-    }
-
-    lines.forEach((line) => {
-      if (line.startsWith('```')) {
-        if (inCodeBlock) { flushCodeBlock(); inCodeBlock = false } else { flushList(); inCodeBlock = true }
-        return
-      }
-      if (inCodeBlock) { currentCodeBlock.push(line); return }
-      if (line.startsWith('## ')) { flushList(); elements.push({ type: 'heading', level: 2, content: line.slice(3).trim(), key: `h2-${elements.length}` }); return }
-      if (line.startsWith('### ')) { flushList(); elements.push({ type: 'heading', level: 3, content: line.slice(4).trim(), key: `h3-${elements.length}` }); return }
-      if (line.match(/^[-*•] /)) { currentList.push(parseBoldAndInlineCode(line.replace(/^[-*•] /, '').trim())); return }
-      if (line.trim()) { flushList(); elements.push({ type: 'paragraph', content: parseBoldAndInlineCode(line), key: `p-${elements.length}` }) }
-      else if (elements.length > 0) { elements.push({ type: 'spacing', key: `space-${elements.length}` }) }
-    })
-    flushCodeBlock()
-    flushList()
-    return elements
-  }
-
-  const parseBoldAndInlineCode = (text) => {
-    const parts = []
-    let remaining = text
-    let key = 0
-    const patterns = [
-      { regex: /\*\*(.*?)\*\*/g, type: 'bold' },
-      { regex: /`(.*?)`/g, type: 'code' },
-      { regex: /https?:\/\/[^\s]+/g, type: 'link' }
-    ]
-
-    while (remaining.length > 0) {
-      let earliestMatch = null, earliestIndex = Infinity, matchedPattern = null
-      patterns.forEach(pattern => {
-        pattern.regex.lastIndex = 0
-        const match = pattern.regex.exec(remaining)
-        if (match && match.index < earliestIndex) { earliestMatch = match; earliestIndex = match.index; matchedPattern = pattern }
-      })
-      if (!earliestMatch) { if (remaining.trim()) parts.push({ type: 'text', content: remaining, key: `text-${key++}` }); break }
-      if (earliestIndex > 0) { const beforeText = remaining.slice(0, earliestIndex); if (beforeText.trim()) parts.push({ type: 'text', content: beforeText, key: `text-${key++}` }) }
-      if (matchedPattern.type === 'link') { parts.push({ type: 'link', content: earliestMatch[0], href: earliestMatch[0], key: `link-${key++}` }) }
-      else { parts.push({ type: matchedPattern.type, content: earliestMatch[1], key: `${matchedPattern.type}-${key++}` }) }
-      remaining = remaining.slice(earliestMatch.index + earliestMatch[0].length)
-    }
-    return parts
-  }
-
-  const renderInlineElements = (elements) => {
-    if (typeof elements === 'string') return elements
-    return elements.map(element => {
-      switch (element.type) {
-        case 'bold': return <strong key={element.key}>{element.content}</strong>
-        case 'code': return <code key={element.key} className="chat-inline-code">{element.content}</code>
-        case 'link': return <a key={element.key} href={element.href} className="chat-link" target="_blank" rel="noopener noreferrer">{element.content}</a>
-        default: return element.content
-      }
-    })
-  }
-
-  const renderElement = (element) => {
-    switch (element.type) {
-      case 'heading': { const Tag = `h${element.level}`; return <Tag key={element.key} className={`chat-heading chat-heading-${element.level}`}>{element.content}</Tag> }
-      case 'code-block': return <CodeBlock key={element.key} content={element.content} />
-      case 'list': return <ul key={element.key} className="chat-list">{element.items.map((item, i) => <li key={`item-${i}`} className="chat-list-item">{renderInlineElements(item)}</li>)}</ul>
-      case 'paragraph': return <div key={element.key} className="chat-paragraph">{renderInlineElements(element.content)}</div>
-      case 'spacing': return <div key={element.key} className="chat-spacing" />
-      default: return null
-    }
-  }
-
-  return <div className="chat-markdown">{parseMarkdown(content).map(renderElement)}</div>
-}
-
-// === RICH MESSAGE (with media) ===
-function RichContent({ content }) {
-  const mediaElements = extractMediaElements(content)
-  const cleanText = stripMediaFromText(content, mediaElements)
-
-  return (
-    <>
-      {cleanText && <MarkdownRenderer content={cleanText} />}
-      {mediaElements.map((el, i) => {
-        if (el.type === 'image') return <ChatImage key={`media-${i}`} src={el.src} alt={el.alt} />
-        if (el.type === 'audio') return <ChatAudio key={`media-${i}`} src={el.src} />
-        if (el.type === 'file') return <FileCard key={`media-${i}`} filename={el.filename} url={el.url} />
-        return null
-      })}
-    </>
-  )
-}
-
-function ChatMessage({ message, isUser }) {
+// === MESSAGE COMPONENT ===
+function ChatMessage({ message, isUser, agentName }) {
   const [expanded, setExpanded] = useState(false)
   const content = message.content || ''
-  const shouldTruncate = !isUser && content.length > 300
-  const displayContent = shouldTruncate && !expanded ? content.slice(0, 300) + '...' : content
   
+  // Only collapse very long assistant messages (>800 chars)
+  const isLong = !isUser && content.length > 800
+  const summary = isLong ? getMessageSummary(content) : null
+  
+  // Completion detection
   const completionWords = ['done', 'completed', 'finished', 'created', 'saved', 'deployed', 'uploaded', 'submitted']
   const isCompletion = !isUser && completionWords.some(word => content.toLowerCase().includes(word) && content.length < 200)
-
-  // Check if message has attachments
-  const attachments = message.attachments || []
-
-  if (isUser) {
-    return (
-      <div className="chat-msg-text">
-        {displayContent}
-        {attachments.map((att, i) => (
-          att.isImage
-            ? <ChatImage key={`att-${i}`} src={att.url} alt={att.filename} />
-            : <FileCard key={`att-${i}`} filename={att.filename} size={att.size} url={att.url} />
-        ))}
-        {message.channel === 'telegram' && <span className="chat-channel">TG</span>}
-      </div>
-    )
-  }
-
+  
+  const timeStr = message.ts ? formatRelativeTime(message.ts) : ''
+  
   if (isCompletion) {
     return (
-      <div className="chat-completion-card">
-        <div className="chat-completion-icon">✓</div>
-        <div className="chat-completion-text">
-          <RichContent content={displayContent} />
-          {shouldTruncate && <button className="chat-expand-btn" onClick={() => setExpanded(!expanded)}>{expanded ? 'show less' : 'show more'}</button>}
+      <div className={`chat-message ${isUser ? 'chat-message-user' : 'chat-message-assistant'}`}>
+        <div className="chat-message-meta">
+          <span className="chat-message-agent">{agentName}</span>
+          <span className="chat-message-time">{timeStr}</span>
+        </div>
+        <div className="chat-completion-card">
+          <div className="chat-completion-icon"><CheckCircle size={16} color="#22c55e" /></div>
+          <div className="chat-completion-text">
+            <RichContent content={content} stylePrefix="chat" />
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="chat-msg-text">
-      <RichContent content={displayContent} />
-      {shouldTruncate && <button className="chat-expand-btn" onClick={() => setExpanded(!expanded)}>{expanded ? 'show less' : 'show more'}</button>}
-    </div>
-  )
-}
-
-// === ATTACHMENT PREVIEW ===
-function AttachmentPreview({ attachments, onRemove }) {
-  if (!attachments.length) return null
-  return (
-    <div className="chat-attachment-strip">
-      {attachments.map((att, i) => (
-        <div key={i} className="chat-attachment-preview">
-          {att.isImage
-            ? <img src={att.dataUrl || att.url} alt={att.filename} className="chat-attachment-thumb" />
-            : <div className="chat-attachment-file-thumb">📄</div>
-          }
-          <span className="chat-attachment-name">{att.filename}</span>
-          <button className="chat-attachment-remove" onClick={() => onRemove(i)}>✕</button>
+    <div className={`chat-message ${isUser ? 'chat-message-user' : 'chat-message-assistant'}`}>
+      <div className="chat-message-meta">
+        <span className="chat-message-agent">{agentName}</span>
+        <span className="chat-message-time">{timeStr}</span>
+      </div>
+      
+      <div className="chat-message-bubble">
+        <div className="chat-message-content">
+          {isLong && !expanded ? (
+            <>
+              {isUser ? (
+                <div>{summary}</div>
+              ) : (
+                <RichContent content={summary} stylePrefix="chat" />
+              )}
+              <button 
+                className="chat-expand-btn" 
+                onClick={() => setExpanded(true)}
+              >
+                show more ({Math.round(content.length / 1000)}k chars)
+              </button>
+            </>
+          ) : (
+            <>
+              {isUser ? (
+                <div>{content}</div>
+              ) : (
+                <RichContent content={content} stylePrefix="chat" />
+              )}
+              
+              {isLong && expanded && (
+                <button 
+                  className="chat-expand-btn" 
+                  onClick={() => setExpanded(false)}
+                >
+                  show less
+                </button>
+              )}
+            </>
+          )}
+          
+          {/* Handle attachments */}
+          {message.attachments?.map((att, i) => (
+            att.isImage
+              ? <ImageComponent key={`att-${i}`} src={att.url} alt={att.filename} stylePrefix="chat" />
+              : <FileCard key={`att-${i}`} filename={att.filename} size={att.size} url={att.url} stylePrefix="chat" />
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   )
 }
 
-// === CHAT FILTERING ===
-const AGENT_ANNOUNCEMENT_PATTERNS = [
-  /sub-?agent.*(?:just completed|finished|done)/i,
-  /subagent task/i,
-  /Stats:\s*runtime/i,
-  /sessionKey\s+agent:main:subagent:/i,
-  /\bsub-?agent\b.*\bcomplete[d]?\b/i,
-  /spawned.*agent.*completed/i,
-  /agent:main:subagent:[a-f0-9-]+/,
-  /completed.*(?:runtime|tokens|cost)/i,
-]
+// AttachmentPreview is imported from shared components
 
-function isAgentAnnouncement(msg) {
-  if (msg.role !== 'assistant') return false
-  const content = msg.content || ''
-  return AGENT_ANNOUNCEMENT_PATTERNS.some(p => p.test(content))
-}
-
-// === UPLOAD HELPER ===
-async function uploadFile(file) {
-  const formData = new FormData()
-  formData.append('file', file)
-  const res = await fetch('/api/upload', { method: 'POST', body: formData })
-  if (!res.ok) { const data = await res.json(); throw new Error(data.error || 'Upload failed') }
-  return res.json()
-}
-
-// === CHAT PANEL ===
-export default function ChatPanel({ externalOpen, onExternalToggle }) {
-  const [open, setOpen] = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
-
-  useEffect(() => {
-    if (externalOpen !== undefined && externalOpen !== open) {
-      if (externalOpen) setOpen(true)
-      else handleToggle()
-    }
-  }, [externalOpen])
+// === MAIN CHAT PANEL ===
+export default function ChatPanel() {
+  const [isOpen, setIsOpen] = useState(false)
+  const [conversations, setConversations] = useState([])
+  const [activeConversationId, setActiveConversationId] = useState('main')
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [attachments, setAttachments] = useState([])
   const [dragging, setDragging] = useState(false)
+  
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const panelRef = useRef(null)
   const dragCounter = useRef(0)
   const fileInputRef = useRef(null)
-
-  useEffect(() => { if (messages.length > 0) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-  useEffect(() => { if (open) setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'instant' }), 50) }, [open])
-  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 50) }, [open])
-
-  const handleToggle = () => {
-    if (open) {
-      setIsClosing(true)
-      setTimeout(() => {
-        setOpen(false)
-        setIsClosing(false)
-        if (onExternalToggle) onExternalToggle(false)
-      }, 300)
-    } else {
-      setOpen(true)
-      if (onExternalToggle) onExternalToggle(true)
+  
+  // Scroll to bottom when messages change, but only if user is near the bottom
+  const messagesContainerRef = useRef(null)
+  const prevMessageCount = useRef(0)
+  useEffect(() => {
+    if (!messages.length) return
+    const isNewMessage = messages.length !== prevMessageCount.current
+    prevMessageCount.current = messages.length
+    // Only auto-scroll if this is a genuinely new message (user just sent or received)
+    // and not a poll refresh of existing messages
+    if (!isNewMessage) return
+    // Don't force scroll — user might be reading. Only scroll if they just opened the panel.
+    if (justOpened.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
     }
-  }
+  }, [messages])
 
+  // Scroll to bottom and focus input when panel opens
+  const justOpened = useRef(false)
+  useEffect(() => {
+    if (isOpen) {
+      justOpened.current = true
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+        inputRef.current?.focus()
+        // Allow poll-driven scrolls to be ignored after a brief moment
+        setTimeout(() => { justOpened.current = false }, 500)
+      }, 50)
+    }
+  }, [isOpen])
+
+  // Keyboard shortcut for toggle
   useEffect(() => {
     const handler = (e) => {
       if (e.key === '\\' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -403,16 +222,144 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
         if (!isOurInput && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) return
         e.preventDefault()
         e.stopImmediatePropagation()
-        handleToggle()
+        setIsOpen(prev => !prev)
       }
     }
     window.addEventListener('keydown', handler, true)
     return () => window.removeEventListener('keydown', handler, true)
-  }, [open])
+  }, [])
 
-  // === PASTE HANDLER ===
+  // Load conversations (main + sub-agents)
+  const loadConversations = useCallback(async () => {
+    try {
+      const [historyRes, agentsRes] = await Promise.all([
+        fetch('/api/history?limit=1'),
+        fetch('/api/agents')
+      ])
+      
+      const historyData = await historyRes.json()
+      const agentsData = await agentsRes.json()
+      
+      const mainConv = {
+        id: 'main',
+        name: 'Woozy',
+        status: 'running',
+        lastMessage: historyData.messages?.[0]?.content || null,
+        unreadCount: 0,
+        lastActiveTime: historyData.messages?.[0]?.ts || Date.now(),
+        sessionKey: 'main'
+      }
+      
+      const subAgentConvs = (agentsData.agents || [])
+        .filter(agent => agent.status === 'running' || (Date.now() - (agent.lastActiveTime || 0)) < 5 * 60 * 1000)
+        .map(agent => ({
+          id: agent.id,
+          name: agent.name || agent.id,
+          status: agent.status,
+          lastMessage: agent.lastMessage || null,
+          unreadCount: 0,
+          lastActiveTime: agent.lastActiveTime || Date.now(),
+          sessionKey: agent.sessionKey
+        }))
+      
+      setConversations([mainConv, ...subAgentConvs])
+    } catch (error) {
+      console.error('Failed to load conversations:', error)
+      // Fallback to just main conversation
+      setConversations([{
+        id: 'main',
+        name: 'Woozy',
+        status: 'running',
+        lastMessage: null,
+        unreadCount: 0,
+        lastActiveTime: Date.now(),
+        sessionKey: 'main'
+      }])
+    }
+  }, [])
+
+  // Load messages for active conversation
+  const loadMessages = useCallback(async (conversationId) => {
+    if (conversationId === 'main') {
+      try {
+        const res = await fetch('/api/history?limit=100')
+        const data = await res.json()
+        setMessages(data.messages || [])
+      } catch (error) {
+        console.error('Failed to load main messages:', error)
+        setMessages([])
+      }
+    } else {
+      try {
+        const res = await fetch(`/api/agents?detail=${conversationId}`)
+        const data = await res.json()
+        setMessages(data.transcript || [])
+      } catch (error) {
+        console.error('Failed to load sub-agent messages:', error)
+        setMessages([])
+      }
+    }
+  }, [])
+
+  // Load initial data
   useEffect(() => {
-    if (!open) return
+    if (isOpen) {
+      loadConversations()
+      loadMessages(activeConversationId)
+    }
+  }, [isOpen, activeConversationId, loadConversations, loadMessages])
+
+  // Poll for updates when panel is open
+  useEffect(() => {
+    if (!isOpen) return
+    
+    const interval = setInterval(() => {
+      loadConversations()
+      loadMessages(activeConversationId)
+    }, 3000)
+    
+    return () => clearInterval(interval)
+  }, [isOpen, activeConversationId, loadConversations, loadMessages])
+
+  // Handle conversation selection
+  const handleConversationSelect = (conversationId) => {
+    setActiveConversationId(conversationId)
+  }
+
+  // Handle conversation close
+  const handleConversationClose = (conversationId) => {
+    setConversations(prev => prev.filter(conv => conv.id !== conversationId))
+    if (activeConversationId === conversationId) {
+      setActiveConversationId('main')
+    }
+  }
+
+  // Drag and drop handlers
+  const handleDragEnter = (e) => {
+    e.preventDefault()
+    dragCounter.current++
+    if (e.dataTransfer?.types?.includes('Files')) setDragging(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    dragCounter.current--
+    if (dragCounter.current <= 0) { dragCounter.current = 0; setDragging(false) }
+  }
+
+  const handleDragOver = (e) => { e.preventDefault() }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    dragCounter.current = 0
+    setDragging(false)
+    const files = e.dataTransfer?.files
+    if (files) for (const file of files) addFileAttachment(file)
+  }
+
+  // Paste handler
+  useEffect(() => {
+    if (!isOpen) return
     const handler = (e) => {
       const items = e.clipboardData?.items
       if (!items) return
@@ -428,27 +375,7 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
     const panel = panelRef.current
     if (panel) panel.addEventListener('paste', handler)
     return () => { if (panel) panel.removeEventListener('paste', handler) }
-  }, [open, attachments])
-
-  // === DRAG AND DROP ===
-  const handleDragEnter = (e) => {
-    e.preventDefault()
-    dragCounter.current++
-    if (e.dataTransfer?.types?.includes('Files')) setDragging(true)
-  }
-  const handleDragLeave = (e) => {
-    e.preventDefault()
-    dragCounter.current--
-    if (dragCounter.current <= 0) { dragCounter.current = 0; setDragging(false) }
-  }
-  const handleDragOver = (e) => { e.preventDefault() }
-  const handleDrop = (e) => {
-    e.preventDefault()
-    dragCounter.current = 0
-    setDragging(false)
-    const files = e.dataTransfer?.files
-    if (files) for (const file of files) addFileAttachment(file)
-  }
+  }, [isOpen])
 
   const addFileAttachment = (file) => {
     const isImage = file.type.startsWith('image/')
@@ -467,52 +394,13 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }
 
-  const mergeMessages = useCallback((serverMsgs, localMsgs) => {
-    const all = [...serverMsgs, ...localMsgs]
-    const seen = new Set()
-    return all.filter(m => {
-      const tsKey = Math.round((m.ts || 0) / 2000)
-      const key = `${m.role}:${tsKey}:${(m.content || '').slice(0, 40)}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    }).sort((a, b) => (a.ts || 0) - (b.ts || 0))
-  }, [])
-
-  useEffect(() => {
-    if (messages.length > 0) localStorage.setItem('woozy-chat-backup', JSON.stringify(messages.slice(-200)))
-  }, [messages])
-
-  useEffect(() => {
-    const localBackup = (() => { try { return JSON.parse(localStorage.getItem('woozy-chat-backup') || '[]') } catch { return [] } })()
-    fetch('/api/history?limit=100').then(r => r.json()).then(data => {
-      const merged = mergeMessages(data.messages || [], localBackup)
-      setMessages(merged)
-    }).catch(() => { if (localBackup.length) setMessages(localBackup) })
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    const poll = setInterval(() => {
-      const lastTs = messages.length > 0 ? Math.max(...messages.filter(m => m.ts).map(m => m.ts)) : 0
-      fetch(`/api/history?limit=10&after=${lastTs}`).then(r => r.json()).then(data => {
-        if (data.messages?.length) {
-          setMessages(prev => {
-            const existing = new Set(prev.map(m => `${m.role}:${m.ts}`))
-            const newMsgs = data.messages.filter(m => !existing.has(`${m.role}:${m.ts}`))
-            return newMsgs.length ? [...prev, ...newMsgs] : prev
-          })
-        }
-      }).catch(() => {})
-    }, 3000)
-    return () => clearInterval(poll)
-  }, [open, messages])
-
-  const pendingRef = useRef(0)
-  const send = async () => {
+  // Send message
+  const sendMessage = async () => {
     if (!input.trim() && !attachments.length) return
-    const text = input.trim()
 
+    const text = input.trim()
+    const conversation = conversations.find(c => c.id === activeConversationId)
+    
     // Upload attachments first
     let uploadedAttachments = []
     for (const att of attachments) {
@@ -540,69 +428,173 @@ export default function ChatPanel({ externalOpen, onExternalToggle }) {
       ts: Date.now(),
       attachments: uploadedAttachments
     }
+
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setAttachments([])
-    setTimeout(() => inputRef.current?.focus(), 0)
-    pendingRef.current++
+    setTimeout(() => {
+      inputRef.current?.focus()
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }, 50)
+
     setLoading(true)
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: messageText }) })
+      const payload = { message: messageText }
+      if (conversation?.sessionKey && conversation.sessionKey !== 'main') {
+        payload.sessionKey = conversation.sessionKey
+      }
+      
+      const res = await fetch('/api/chat', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      })
+      
       const data = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply || data.error || 'Error', ts: Date.now() }])
-    } catch (err) { setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}`, ts: Date.now() }]) }
-    pendingRef.current--
-    if (pendingRef.current <= 0) { pendingRef.current = 0; setLoading(false) }
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: data.reply || data.error || 'Error', 
+        ts: Date.now() 
+      }])
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    } catch (err) {
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `Error: ${err.message}`, 
+        ts: Date.now() 
+      }])
+    }
+    setLoading(false)
   }
 
-  const clearHistory = () => { setMessages([]); localStorage.removeItem('woozy-chat'); localStorage.removeItem('woozy-chat-backup') }
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  }
 
-  if (!open) return <button className="chat-fab" onClick={handleToggle}><span className="chat-fab-icon">⌘</span></button>
+  const activeConversation = conversations.find(c => c.id === activeConversationId)
+
+  if (!isOpen) {
+    return (
+      <button className="chat-fab" onClick={() => setIsOpen(true)}>
+        <span className="chat-fab-icon"><Command size={20} /></span>
+      </button>
+    )
+  }
 
   return (
     <div
-      className={`chat-panel ${isClosing ? 'closing' : ''}`}
+      className="chat-panel-container"
       ref={panelRef}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <div className="chat-header">
-        <span className="chat-header-title">WOOZY TERMINAL</span>
-        <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
-          <button className="chat-clear" onClick={clearHistory} title="Clear local history">⌫</button>
-          <button className="chat-close" onClick={handleToggle}>✕</button>
+      {/* Sidebar */}
+      <div className="chat-sidebar">
+        <div className="chat-sidebar-header">
+          <span className="chat-sidebar-title">CONVERSATIONS</span>
+          <button className="chat-sidebar-close" onClick={() => setIsOpen(false)}><X size={14} /></button>
+        </div>
+        
+        <div className="chat-conversations">
+          {conversations.map(conversation => (
+            <ConversationItem
+              key={conversation.id}
+              conversation={conversation}
+              isActive={conversation.id === activeConversationId}
+              onClick={() => handleConversationSelect(conversation.id)}
+              onClose={handleConversationClose}
+            />
+          ))}
         </div>
       </div>
-      <div className="chat-messages">
-        {messages.length === 0 && <div className="chat-empty">Connected to main session<br/>Same memory as Telegram</div>}
-        {messages.filter(m => !isAgentAnnouncement(m)).map((m, i) => (
-          <div key={i} className={`chat-msg ${m.role === 'user' ? 'chat-msg-user' : 'chat-msg-bot'}`}>
-            <div className="chat-msg-label">{m.role === 'user' ? '>' : ''}</div>
-            <ChatMessage message={m} isUser={m.role === 'user'} />
+
+      {/* Main chat area */}
+      <div className="chat-main">
+        <div className="chat-main-header">
+          <span className="chat-main-title">
+            {activeConversation?.id === 'main' && <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ marginRight: 4, verticalAlign: 'middle' }}><circle cx="8" cy="8" r="7.5" stroke="white" strokeWidth="1"/><circle cx="8" cy="8" r="3" fill="white"/></svg> </>}
+            {activeConversation?.name || 'Chat'}
+          </span>
+          <div className="chat-main-status">
+            <div className={`chat-status-dot ${
+              activeConversation?.status === 'running' 
+                ? 'chat-status-running' 
+                : 'chat-status-complete'
+            }`} />
+            <span>{activeConversation?.status || 'unknown'}</span>
           </div>
-        ))}
-        {loading && <div className="chat-msg chat-msg-bot"><div className="chat-msg-label"></div><div className="chat-msg-text chat-typing">thinking<span className="blink">_</span></div></div>}
-        <div ref={messagesEndRef} />
-      </div>
-      {dragging && (
-        <div className="chat-drop-zone">
-          <span className="chat-drop-text">Drop file</span>
         </div>
-      )}
-      <AttachmentPreview attachments={attachments} onRemove={removeAttachment} />
-      <div className="chat-input-row">
-        <button className="chat-attach-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">⊕</button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          style={{ display: 'none' }}
-          multiple
-          onChange={(e) => { for (const f of e.target.files) addFileAttachment(f); e.target.value = '' }}
-        />
-        <span className="chat-prompt">&gt;</span>
-        <input ref={inputRef} className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="message woozy..." />
+
+        <div className="chat-main-messages" ref={messagesContainerRef}>
+          {messages.length === 0 ? (
+            <div className="chat-empty">
+              {activeConversationId === 'main' 
+                ? 'Connected to main session\nSame memory as Telegram' 
+                : 'No messages yet'}
+            </div>
+          ) : (
+            messages.map((message, i) => (
+              <ChatMessage
+                key={i}
+                message={message}
+                isUser={message.role === 'user'}
+                agentName={message.role === 'user' ? 'You' : (activeConversation?.name || 'Assistant')}
+              />
+            ))
+          )}
+          
+          {loading && (
+            <div className="chat-message chat-message-assistant">
+              <div className="chat-message-meta">
+                <span className="chat-message-agent">{activeConversation?.name || 'Assistant'}</span>
+              </div>
+              <div className="chat-message-bubble chat-typing">
+                thinking<span className="blink">_</span>
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesEndRef} />
+        </div>
+
+        {dragging && (
+          <div className="chat-drop-zone">
+            <span className="chat-drop-text">Drop files here</span>
+          </div>
+        )}
+
+        <AttachmentPreview attachments={attachments} onRemove={removeAttachment} stylePrefix="chat" />
+
+        <div className="chat-input-container">
+          <button 
+            className="chat-attach-btn" 
+            onClick={() => fileInputRef.current?.click()} 
+            title="Attach file"
+          >
+            <Paperclip size={15} />
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            multiple
+            onChange={(e) => { for (const f of e.target.files) addFileAttachment(f); e.target.value = '' }}
+          />
+          <span className="chat-prompt">&gt;</span>
+          <input
+            ref={inputRef}
+            className="chat-input"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`message ${activeConversation?.name?.toLowerCase() || 'chat'}...`}
+          />
+        </div>
       </div>
     </div>
   )

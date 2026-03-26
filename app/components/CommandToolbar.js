@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import NotificationCenter from './notifications/NotificationCenter'
+import { Circle, Home, DollarSign } from 'lucide-react'
 
 export default function CommandToolbar({ 
   onCapture, 
@@ -333,7 +334,9 @@ export default function CommandToolbar({
   const urgencyDot = getDeadlineUrgency()
   const nextEvent = getNextEvent()
   const taskStats = getTaskStats()
-  const energyDots = '●'.repeat(energy) + '○'.repeat(5 - energy)
+  const energyDots = Array.from({ length: 5 }, (_, i) => (
+    <Circle key={i} size={8} fill={i < energy ? 'currentColor' : 'none'} style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+  ))
 
   return (
     <div className="command-hud">
@@ -433,7 +436,7 @@ export default function CommandToolbar({
             title={isFinancePage ? 'Back to dashboard [$]' : 'Finance [$]'}
             style={{ textDecoration: 'none' }}
           >
-            <span className="btn-content">{isFinancePage ? '⌂' : '$'}</span>
+            <span className="btn-content">{isFinancePage ? <Home size={14} /> : <DollarSign size={14} />}</span>
           </Link>
         </div>
       </div>

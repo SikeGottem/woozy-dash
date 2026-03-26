@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext'
 
 export default function AgentDM() {
@@ -78,7 +79,7 @@ export default function AgentDM() {
     <div className="dm-panel">
       <div className="dm-header">
         <span className="dm-header-title">DM: {dmAgent.name}</span>
-        <button className="dm-close" onClick={closeDm}>✕</button>
+        <button className="dm-close" onClick={closeDm}><X size={14} /></button>
       </div>
       <div className="dm-messages">
         {loadingHistory && <div className="dm-loading">Loading transcript...</div>}

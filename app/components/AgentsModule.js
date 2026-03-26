@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { ArrowLeft, Check, XCircle, Circle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useNotifications } from '../context/NotificationContext'
 
 const TASK_TEMPLATES = [
@@ -141,7 +142,7 @@ function AgentDetail({ agentId, onClose }) {
   return (
     <div className="acc-detail">
       <div className="acc-detail-header">
-        <button className="acc-back-btn" onClick={onClose}>← BACK</button>
+        <button className="acc-back-btn" onClick={onClose}><ArrowLeft size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />BACK</button>
         <div className="acc-detail-title">{data.name}</div>
         <TypeBadge type={data.type} />
       </div>
@@ -166,7 +167,7 @@ function AgentDetail({ agentId, onClose }) {
             {msg.thinking?.length > 0 && (
               <div className="acc-thinking-block">
                 <button className="acc-thinking-toggle" onClick={() => toggleThinking(i)}>
-                  {showThinking[i] ? '▾ THINKING' : '▸ THINKING'}
+                  {showThinking[i] ? <><ChevronDown size={12} style={{ verticalAlign: 'middle' }} /> THINKING</> : <><ChevronRight size={12} style={{ verticalAlign: 'middle' }} /> THINKING</>}
                 </button>
                 {showThinking[i] && <div className="acc-thinking-content">{msg.thinking.join('\n\n')}</div>}
               </div>
@@ -261,7 +262,7 @@ function ActivityTimeline({ timeline }) {
     <div className="acc-timeline">
       <div className="acc-section-title">ACTIVITY FEED</div>
       {timeline.map((entry, i) => {
-        const icon = entry.status === 'running' ? '●' : entry.status === 'killed' ? '✗' : '✓'
+        const icon = entry.status === 'running' ? <Circle size={10} fill="currentColor" /> : entry.status === 'killed' ? <XCircle size={12} /> : <Check size={12} />
         const iconClass = entry.status === 'running' ? 'tl-running' : entry.status === 'killed' ? 'tl-failed' : 'tl-complete'
         return (
           <div key={i} className="acc-tl-entry">

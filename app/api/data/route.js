@@ -43,10 +43,17 @@ function formatTask(task, project = null) {
     estimated_minutes: task.estimated_minutes || null,
     context: task.context || null,
     completed_by: task.completed_by || null,
+    is_focus: task.is_focus ? true : false,
     section: task.section || 'this_week',
     sort_order: task.sort_order,
     completed_at: task.completed_at,
-    created_at: task.created_at
+    created_at: task.created_at,
+    // Subtask counts (populated separately)
+    subtask_done: task.subtask_done || 0,
+    subtask_total: task.subtask_total || 0,
+    // Dependencies (populated separately)
+    dependencies: task.dependencies || [],
+    is_blocked: task.is_blocked || false,
   }
 }
 
@@ -176,40 +183,21 @@ function getFinanceFromDB(db) {
     ORDER BY CASE p.status WHEN 'active' THEN 0 ELSE 1 END, p.updated_at DESC
   `).all()
 
-  // Load live holdings data
-  let holdings = []
-  try {
-    holdings = db.prepare('SELECT * FROM holdings').all()
-  } catch {}
-
-  // Use live prices for investments if available
-  const hndqHolding = holdings.find(h => h.name === 'HNDQ')
-  const goldHolding = holdings.find(h => h.name === 'Gold')
-  const liveInvested = (hndqHolding?.current_value || byName['Investments'] || 0) 
-                     + (goldHolding?.current_value || byName['Gold'] || 0)
-  const liveNetWorth = liquid + liveInvested + receivables
-
   // Build legacy assets shape for backward compat
   const assets = {
     checking: byName['Checking'] || 0,
     savings: byName['Savings'] || 0,
     cash: byName['Cash'] || 0,
-    investments: hndqHolding?.current_value || byName['Investments'] || 0,
-    gold: { grams: 20, value: goldHolding?.current_value || byName['Gold'] || 0 },
+    investments: byName['Investments'] || 0,
+    gold: { grams: 20, value: byName['Gold'] || 0 },
     receivables,
-    netWorth: liveNetWorth
+    netWorth
   }
 
   return {
     accounts,
-    holdings: holdings.map(h => ({
-      ...h,
-      gain: h.current_value && h.cost_basis ? Math.round((h.current_value - h.cost_basis) * 100) / 100 : 0,
-      gainPct: h.current_value && h.cost_basis > 0 ? Math.round(((h.current_value - h.cost_basis) / h.cost_basis) * 10000) / 100 : 0
-    })),
     transactions: transactions.map(tr => ({
       ...formatTransaction(tr),
-      project_name: tr.project_name,
       account_name: tr.account_name,
       tags: tr.tags,
       recurring: tr.recurring,
@@ -221,7 +209,7 @@ function getFinanceFromDB(db) {
       total_paid: p.total_paid,
       total_pending: p.total_pending,
     })),
-    summary: { netWorth: liveNetWorth, liquid, invested: liveInvested, receivables, monthlyIncome, monthlyExpenses },
+    summary: { netWorth, liquid, invested, receivables, monthlyIncome, monthlyExpenses },
     assets // legacy compat
   }
 }
@@ -251,6 +239,73 @@ function getSubtasks(db, parentIds) {
   `).all(...parentIds)
 }
 
+function getSubtaskCounts(db, taskIds) {
+  if (!taskIds.length) return {}
+  const placeholders = taskIds.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT parent_id,
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
+    FROM tasks WHERE parent_id IN (${placeholders})
+    GROUP BY parent_id
+  `).all(...taskIds)
+  const map = {}
+  for (const r of rows) map[r.parent_id] = { total: r.total, done: r.done }
+  return map
+}
+
+function getDependencies(db, taskIds) {
+  if (!taskIds.length) return {}
+  const placeholders = taskIds.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT td.task_id, td.dependency_task_id, t.title, t.status
+    FROM task_dependencies td
+    JOIN tasks t ON t.id = td.dependency_task_id
+    WHERE td.task_id IN (${placeholders})
+  `).all(...taskIds)
+  const map = {}
+  for (const r of rows) {
+    if (!map[r.task_id]) map[r.task_id] = []
+    map[r.task_id].push({ id: r.dependency_task_id, title: r.title, status: r.status })
+  }
+  return map
+}
+
+function getDependents(db, taskIds) {
+  if (!taskIds.length) return {}
+  const placeholders = taskIds.map(() => '?').join(',')
+  const rows = db.prepare(`
+    SELECT td.dependency_task_id, td.task_id, t.title, t.status
+    FROM task_dependencies td
+    JOIN tasks t ON t.id = td.task_id
+    WHERE td.dependency_task_id IN (${placeholders}) AND t.status NOT IN ('done', 'skipped')
+  `).all(...taskIds)
+  const map = {}
+  for (const r of rows) {
+    if (!map[r.dependency_task_id]) map[r.dependency_task_id] = []
+    map[r.dependency_task_id].push({ id: r.task_id, title: r.title, status: r.status })
+  }
+  return map
+}
+
+function enrichTasks(db, tasks, projects) {
+  const taskIds = tasks.map(t => t.id)
+  const subtaskCounts = getSubtaskCounts(db, taskIds)
+  const deps = getDependencies(db, taskIds)
+  const dependents = getDependents(db, taskIds)
+
+  return tasks.map(t => {
+    const formatted = formatTask(t, projects?.find(p => p.id === t.project_id))
+    const sc = subtaskCounts[t.id]
+    if (sc) { formatted.subtask_done = sc.done; formatted.subtask_total = sc.total }
+    const taskDeps = deps[t.id] || []
+    formatted.dependencies = taskDeps
+    formatted.is_blocked = taskDeps.some(d => d.status !== 'done')
+    formatted.unlocks = dependents[t.id] || []
+    return formatted
+  })
+}
+
 function nestSubtasks(tasks, subtasks, projects) {
   const subtasksByParent = {}
   for (const st of subtasks) {
@@ -265,14 +320,10 @@ function nestSubtasks(tasks, subtasks, projects) {
 }
 
 function getTaskCounts(db, category = null) {
-  if (category) {
-    return db.prepare(
-      'SELECT status, COUNT(*) as count FROM tasks WHERE category = ? GROUP BY status'
-    ).all(category).reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
-  }
-  return db.prepare(
-    'SELECT status, COUNT(*) as count FROM tasks GROUP BY status'
-  ).all().reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
+  const where = category ? `WHERE category = '${category}'` : ''
+  return db.prepare(`
+    SELECT status, COUNT(*) as count FROM tasks ${where} GROUP BY status
+  `).all().reduce((acc, r) => { acc[r.status] = r.count; return acc }, {})
 }
 
 function getUniData(db) {
@@ -444,13 +495,44 @@ function getAllData(db) {
     ORDER BY h.name
   `).all(today)
 
-  const formattedTasks = nestSubtasks(tasks, subtasks, projects)
+  const formattedTasks = enrichTasks(db, tasks, projects)
+  // Also attach subtasks from nestSubtasks
+  const subtasksByParent = {}
+  for (const st of subtasks) {
+    if (!subtasksByParent[st.parent_id]) subtasksByParent[st.parent_id] = []
+    subtasksByParent[st.parent_id].push(formatTask(st))
+  }
+  for (const t of formattedTasks) {
+    t.subtasks = subtasksByParent[t.id] || []
+  }
+
+  // All tasks (for dependency picker)
+  const allTasksForPicker = db.prepare(`
+    SELECT id, title, status, project_id FROM tasks WHERE parent_id IS NULL ORDER BY title
+  `).all()
+
+  // Done today
+  const doneToday = db.prepare(`
+    SELECT t.*, p.name as project_name, p.color as project_color, p.type as project_type
+    FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+    WHERE t.status = 'done' AND date(t.completed_at) = date('now')
+    ORDER BY t.completed_at DESC
+  `).all().map(t => formatTask(t))
+
+  // All project tasks (including done) for progress bars
+  const allProjectTasks = db.prepare(`
+    SELECT t.id, t.status, t.project_id FROM tasks t
+    WHERE t.project_id IN (1, 2, 3) AND t.parent_id IS NULL
+  `).all()
 
   const pinnedProject = projects.find(p => p.type === 'freelance' && p.status === 'active') || projects[0]
   const pinnedTasks = pinnedProject ? formattedTasks.filter(t => t.project_id === pinnedProject.id) : []
 
   return {
     tasks: formattedTasks,
+    allTasksForPicker,
+    doneToday,
+    allProjectTasks,
     projects: projects.map(formatProject),
     deadlines: deadlines.map(deadline => formatDeadline(deadline, projects.find(p => p.id === deadline.project_id))),
     income: income.map(tr => formatTransaction(tr, projects.find(p => p.id === tr.project_id))),

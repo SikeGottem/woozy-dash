@@ -1,4 +1,5 @@
 'use client'
+import { Check } from 'lucide-react'
 
 export default function FreelanceModule({ data, unlocked }) {
   return (
@@ -16,7 +17,7 @@ export default function FreelanceModule({ data, unlocked }) {
                 </div>
                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem'}}>
                   <span className={`status-tag ${client.status === 'active' ? 'status-active' : 'status-inactive'}`}>{client.status}</span>
-                  {client.deposit && <span className={`status-tag ${client.deposit === 'paid' ? 'status-active' : 'status-pending'}`}>{client.deposit === 'paid' ? 'deposit ✓' : 'deposit pending'}</span>}
+                  {client.deposit && <span className={`status-tag ${client.deposit === 'paid' ? 'status-active' : 'status-pending'}`}>{client.deposit === 'paid' ? <>deposit <Check size={11} style={{ verticalAlign: 'middle' }} /></> : 'deposit pending'}</span>}
                 </div>
               </li>
             ))}

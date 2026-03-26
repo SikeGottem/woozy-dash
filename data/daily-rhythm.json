@@ -1,0 +1,33 @@
+{
+  "date": "2026-03-26",
+  "morningReport": {
+    "postedAt": "2026-03-26T06:30:00",
+    "weather": "20°C sunny",
+    "events": [
+      {"time": "10:00", "title": "COMM1100 Lecture"},
+      {"time": "14:00", "title": "Team standup"}
+    ],
+    "tasks": [
+      {"text": "Headland naming options", "status": "partial", "priority": "high"},
+      {"text": "Bristlecone slides review", "status": "pending", "priority": "medium"},
+      {"text": "COMM1100 prep", "status": "done", "priority": "low"}
+    ],
+    "overdue": ["Headland naming — 2 days overdue"],
+    "research": {
+      "topic": "Headland naming", 
+      "summary": "5 naming patterns analysed..."
+    }
+  },
+  "arvoReview": {
+    "postedAt": null,
+    "taskResults": null
+  },
+  "eveningCheckin": {
+    "postedAt": null,
+    "responses": null
+  },
+  "gym": {
+    "nudgeSent": true,
+    "completed": null
+  }
+}

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-
+import { ArrowRight } from 'lucide-react'
 import { PinLock, DecryptReveal } from './ui/PinLock'
 export { PinLock, DecryptReveal }
 
@@ -84,7 +84,7 @@ export default function FinanceModule({ data, unlocked, onUnlock }) {
           }}
             onMouseOver={e => {e.target.style.color='#fff';e.target.style.borderColor='#444'}}
             onMouseOut={e => {e.target.style.color='#999';e.target.style.borderColor='#222'}}
-          >View Finance →</a>
+          >View Finance <ArrowRight size={12} style={{ verticalAlign: 'middle' }} /></a>
         </div>
       </DecryptReveal>
     </div>

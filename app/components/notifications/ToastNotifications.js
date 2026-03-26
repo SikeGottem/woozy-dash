@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 import { useNotifications } from '../../context/NotificationContext'
 
 function formatDuration(seconds) {
@@ -54,7 +55,7 @@ function Toast({ toast, onDismiss, onViewTranscript, onReply }) {
           <span className="toast-name">{toast.agentName}</span>
           <span className="toast-status">{statusLabel}</span>
         </div>
-        <button className="toast-dismiss" onClick={(e) => { e.stopPropagation(); handleDismiss() }}>✕</button>
+        <button className="toast-dismiss" onClick={(e) => { e.stopPropagation(); handleDismiss() }}><X size={14} /></button>
       </div>
 
       {toast.summary && (
