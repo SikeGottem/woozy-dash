@@ -2,7 +2,9 @@
 import { useEffect, useState } from 'react'
 import BootSequence from './components/BootSequence'
 import NavBar from './components/NavBar'
-import TasksModule from './components/TasksModule'
+import WeatherModule from './components/WeatherModule'
+import EventsTimelineModule from './components/EventsTimelineModule'
+import TodayTasksModule from './components/TodayTasksModule'
 import DailyRhythmModule from './components/DailyRhythmModule'
 // ChatPanel is in layout.js
 import ErrorBoundary from './components/ui/ErrorBoundary'
@@ -66,11 +68,22 @@ export default function Home() {
       <NavBar />
       
       <div className="page-content">
+        {/* TODAY COMMAND CENTRE */}
+        <div className="today-grid">
+          <ErrorBoundary name="Weather">
+            <WeatherModule />
+          </ErrorBoundary>
+          <ErrorBoundary name="EventsTimeline">
+            <EventsTimelineModule />
+          </ErrorBoundary>
+          <ErrorBoundary name="TodayTasks">
+            <TodayTasksModule />
+          </ErrorBoundary>
+        </div>
+        
+        {/* DAILY RHYTHM FLOW */}
         <ErrorBoundary name="DailyRhythm">
           <DailyRhythmModule data={data} />
-        </ErrorBoundary>
-        <ErrorBoundary name="Tasks">
-          <TasksModule data={data} />
         </ErrorBoundary>
       </div>
       

@@ -35,14 +35,17 @@ export default function NavBar() {
         router.push('/')
       } else if (e.key === '2') {
         e.preventDefault()
-        router.push('/agents')
+        router.push('/tasks')
       } else if (e.key === '3') {
         e.preventDefault()
-        router.push('/chat')
+        router.push('/agents')
       } else if (e.key === '4') {
         e.preventDefault()
-        router.push('/vault')
+        router.push('/chat')
       } else if (e.key === '5') {
+        e.preventDefault()
+        router.push('/vault')
+      } else if (e.key === '6') {
         e.preventDefault()
         router.push('/finance')
       }
@@ -79,6 +82,12 @@ export default function NavBar() {
           className={`navbar-link ${isActive('/') ? 'navbar-link-active' : ''}`}
         >
           HOME
+        </Link>
+        <Link 
+          href="/tasks"
+          className={`navbar-link ${isActive('/tasks') ? 'navbar-link-active' : ''}`}
+        >
+          TASKS
         </Link>
         <Link 
           href="/agents"
